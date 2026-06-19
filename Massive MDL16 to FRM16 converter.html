@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Extractor FRM16 - Solo Layer 0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; margin: 0; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { color: #f39c12; text-align: center; margin-bottom: 30px; }
+        .panel { background: #1a1a1a; padding: 25px; border-radius: 12px; border: 1px solid #333; margin-bottom: 20px; }
+        .drop-zone { border: 3px dashed #f39c12; padding: 50px; text-align: center; border-radius: 12px; cursor: pointer; transition: all 0.3s; }
+        .drop-zone:hover { background: rgba(243, 156, 18, 0.05); }
+        button { background: #f39c12; color: #000; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 1em; margin-top: 15px; }
+        button:hover { background: #e67e22; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #status { text-align: center; padding: 10px; font-family: monospace; min-height: 20px; color: #2ecc71; }
+        #log { background: #111; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 0.85em; max-height: 300px; overflow-y: auto; margin-top: 15px; line-height: 1.6; display: none;}
+        .log-entry { border-bottom: 1px solid #222; padding: 2px 0; }
+        .log-ok { color: #2ecc71; }
+        .log-warn { color: #f39c12; }
+        .log-err { color: #e74c3c; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🦁 Extractor MDL16 → FRM16 (Solo Layer 0)</h1>
+    
+    <div class="panel">
+        <div class="drop-zone" id="dropZone">
+            <p style="font-size: 1.2em;">📂 Selecciona la carpeta <strong>Environments</strong></p>
+            <p style="color:#aaa; font-size: 0.9em;">Se procesarán todos los .mdl16 recursivamente</p>
+            <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none;">
+        </div>
+        <div id="status">Esperando carpeta...</div>
+        <div style="text-align:center;">
+            <button id="extractBtn" disabled>⚡ Extraer Layer 0 de Todos</button>
+            <button id="downloadZipBtn" disabled style="background:#2ecc71; display:none;">💾 Descargar ZIP</button>
+        </div>
+        <div id="log"></div>
+    </div>
+</div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const folderInput = document.getElementById('folderInput');
+const extractBtn = document.getElementById('extractBtn');
+const downloadZipBtn = document.getElementById('downloadZipBtn');
+const statusEl = document.getElementById('status');
+const logEl = document.getElementById('log');
+
+let mdlFiles = [];
+let zip = null;
+
+dropZone.onclick = () => folderInput.click();
+
+folderInput.onchange = (e) => {
+    const files = Array.from(e.target.files);
+    mdlFiles = files.filter(f => f.name.toLowerCase().endsWith('.mdl16'));
+    
+    if (mdlFiles.length === 0) {
+        statusEl.innerText = '❌ No se encontraron archivos .mdl16 en la carpeta seleccionada';
+        statusEl.style.color = '#e74c3c';
+        extractBtn.disabled = true;
+        return;
+    }
+    
+    statusEl.innerText = `✅ ${mdlFiles.length} archivos .mdl16 encontrados`;
+    statusEl.style.color = '#2ecc71';
+    extractBtn.disabled = false;
+    logEl.style.display = 'block';
+    logEl.innerHTML = '';
+};
+
+function addLog(msg, type = 'ok') {
+    const div = document.createElement('div');
+    div.className = `log-entry log-${type}`;
+    div.textContent = msg;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Buscar la PRIMERA firma FRM16 dentro del MDL16
+function findFirstFRM16(data) {
+    // Buscar "01 32 10" (MDL16 embebido) o "32 10" (FRM16 suelto)
+    for (let i = 0; i < data.length - 3; i++) {
+        if (data[i] === 0x01 && data[i+1] === 0x32 && data[i+2] === 0x10) {
+            return i; // Offset donde empieza el Layer 0
+        }
+    }
+    // Fallback: buscar "32 10" sin el 01
+    for (let i = 0; i < data.length - 2; i++) {
+        if (data[i] === 0x32 && data[i+1] === 0x10) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Determinar el tamaño del Layer 0 buscando la SIGUIENTE firma o usando el tamaño declarado
+function getLayer0Size(data, startOffset) {
+    // Leer tamaño declarado en header (offset +17 desde firma 01 32 10, o +16 desde 32 10)
+    let sizeOffset;
+    if (data[startOffset] === 0x01) {
+        sizeOffset = startOffset + 17;
+    } else {
+        sizeOffset = startOffset + 16;
+    }
+    
+    if (sizeOffset + 4 <= data.length) {
+        const declaredSize = data[sizeOffset] | (data[sizeOffset+1] << 8) | 
+                            (data[sizeOffset+2] << 16) | (data[sizeOffset+3] << 24);
+        if (declaredSize > 0 && declaredSize < data.length) {
+            return declaredSize + (startOffset === 0 ? 32 : 44); // Incluir header
+        }
+    }
+    
+    // Fallback: buscar siguiente firma FRM16 después de esta
+    for (let i = startOffset + 10; i < data.length - 3; i++) {
+        if ((data[i] === 0x01 && data[i+1] === 0x32 && data[i+2] === 0x10) ||
+            (data[i] === 0x32 && data[i+1] === 0x10)) {
+            return i - startOffset;
+        }
+    }
+    
+    // Último recurso: todo el resto del archivo
+    return data.length - startOffset;
+}
+
+extractBtn.onclick = async () => {
+    extractBtn.disabled = true;
+    downloadZipBtn.style.display = 'none';
+    downloadZipBtn.disabled = true;
+    logEl.innerHTML = '';
+    
+    zip = new JSZip();
+    let processed = 0;
+    let errors = 0;
+    
+    statusEl.innerText = `Procesando 0 / ${mdlFiles.length}...`;
+    
+    // Procesar en lotes para no congelar
+    const BATCH_SIZE = 10;
+    
+    for (let i = 0; i < mdlFiles.length; i += BATCH_SIZE) {
+        const batch = mdlFiles.slice(i, i + BATCH_SIZE);
+        
+        for (const file of batch) {
+            try {
+                const buffer = await file.arrayBuffer();
+                const data = new Uint8Array(buffer);
+                
+                const frmOffset = findFirstFRM16(data);
+                
+                if (frmOffset === -1) {
+                    addLog(`⚠️ ${file.name}: No contiene FRM16`, 'warn');
+                    errors++;
+                    continue;
+                }
+                
+                const layer0Size = getLayer0Size(data, frmOffset);
+                const layer0Data = data.slice(frmOffset, frmOffset + layer0Size);
+                
+                // Nombre: mismo que el mdl16 pero con extensión .frm16
+                const outName = file.name.replace(/\.mdl16$/i, '.frm16');
+                
+                // Mantener estructura de carpetas relativa
+                const relativePath = file.webkitRelativePath || file.name;
+                zip.file(relativePath.replace(/\.mdl16$/i, '.frm16'), layer0Data);
+                
+                addLog(`✅ ${outName} (${layer0Data.length} bytes)`, 'ok');
+                processed++;
+                
+            } catch (err) {
+                addLog(`❌ ${file.name}: ${err.message}`, 'err');
+                errors++;
+            }
+        }
+        
+        statusEl.innerText = `Procesando ${Math.min(i + BATCH_SIZE, mdlFiles.length)} / ${mdlFiles.length}...`;
+        
+        // Permitir respirar al navegador
+        await new Promise(r => setTimeout(r, 0));
+    }
+    
+    statusEl.innerText = `✅ Completado: ${processed} extraídos, ${errors} errores`;
+    extractBtn.disabled = false;
+    
+    if (processed > 0) {
+        downloadZipBtn.style.display = 'inline-block';
+        downloadZipBtn.disabled = false;
+    }
+};
+
+downloadZipBtn.onclick = async () => {
+    statusEl.innerText = 'Generando ZIP...';
+    const content = await zip.generateAsync({ type: 'blob' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(content);
+    link.download = 'Lionheart_FRM16_Layer0.zip';
+    link.click();
+    statusEl.innerText = '✅ ZIP descargado';
+};
+</script>
+</body>
+</html>
