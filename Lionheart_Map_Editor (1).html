@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lionheart · Editor de Mapas</title>
+<style>
+:root{
+  --bg:#14171c; --panel:#1c2026; --panel2:#23282f; --line:#333b45;
+  --ink:#e6e9ee; --muted:#8b95a3; --gold:#e8b54b; --gold-dim:#a9842f;
+  --orange:#e07b39; --yellow:#e3c64b; --blue:#4d8fd6; --red:#d65a5a; --green:#5fbf6e; --purple:#9a6fd6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden;font-size:13px;user-select:none}
+button{font-family:inherit;color:var(--ink);cursor:pointer}
+input{font-family:inherit}
+
+#app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+
+/* Toolbar (orange) */
+#toolbar{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);border-bottom:2px solid var(--orange);flex-wrap:wrap}
+.tb-group{display:flex;gap:3px;align-items:center;padding:0 6px;border-right:1px solid var(--line)}
+.tb-group:last-child{border-right:none}
+.tb-btn{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:6px 9px;font-size:12px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.tb-btn:hover{background:#2c333c;border-color:#46505c}
+.tb-btn:active{background:#1a1e23}
+.tb-btn.icon{padding:6px 8px;font-size:14px;min-width:34px;justify-content:center}
+.mode-btn{border-width:2px}
+.mode-paint[data-active="1"],.mode-place[data-active="1"]{background:#3a2a44;border-color:var(--purple);box-shadow:0 0 0 1px var(--purple) inset}
+.brand{font-weight:700;color:var(--gold);letter-spacing:.3px;padding:0 8px;display:flex;align-items:center;gap:7px}
+.brand small{color:var(--muted);font-weight:400;font-size:11px}
+.spacer{flex:1}
+.hint{color:var(--muted);font-size:11px;padding:0 6px}
+#btnLang{gap:5px;padding:5px 8px}
+#btnLang .fl{font-size:15px;opacity:.32;cursor:pointer;line-height:1;transition:opacity .12s}
+#btnLang .fl[data-active="1"]{opacity:1}
+#btnLang .fl:hover{opacity:.7}
+
+/* Body */
+#body{display:grid;grid-template-columns:280px 1fr 290px;min-height:0}
+#sidebar{background:var(--panel);border-right:1px solid var(--line);display:grid;grid-template-rows:auto auto minmax(120px,1fr) auto;min-height:0}
+#rightbar{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.panel-h{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:7px 10px 5px;display:flex;align-items:center;gap:7px}
+.panel-h::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--line)}
+.h-mini::before{background:var(--yellow)}
+.h-tree::before{background:var(--blue)}
+.h-prev::before{background:var(--red)}
+.h-obj::before{background:var(--green)}
+
+#minimapWrap{padding:0 10px 8px;border-bottom:1px solid var(--line)}
+#minimap{width:100%;height:150px;background:#0e1115;border:1px solid var(--line);border-radius:4px;display:block;cursor:crosshair;image-rendering:pixelated}
+
+#treeWrap{border-bottom:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#search{margin:0 10px 6px;padding:6px 9px;background:#0e1115;border:1px solid var(--line);border-radius:5px;color:var(--ink);font-size:12px;outline:none}
+#search:focus{border-color:var(--blue)}
+#tree{overflow:auto;padding:0 6px 8px;min-height:0;flex:1}
+.tfolder{display:flex;align-items:center;gap:5px;padding:3px 4px;border-radius:4px;cursor:pointer;color:var(--ink)}
+.tfolder:hover{background:var(--panel2)}
+.tfolder .arr{width:12px;color:var(--muted);font-size:10px;transition:transform .12s}
+.tfolder.open .arr{transform:rotate(90deg)}
+.tfolder .fname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tfolder .badge{margin-left:auto;color:var(--muted);font-size:10px}
+.tchildren{margin-left:12px;border-left:1px solid var(--line);padding-left:4px}
+.tfile{display:flex;align-items:center;gap:6px;padding:3px 5px;border-radius:4px;cursor:grab;color:#c4cbd5;white-space:nowrap;overflow:hidden}
+.tfile:hover{background:var(--panel2)}
+.tfile[data-sel="1"]{background:#2a3340;color:#fff;box-shadow:0 0 0 1px var(--blue) inset}
+.tfile .dot{width:7px;height:7px;border-radius:2px;flex:none}
+.tfile .dot.tex{background:var(--green)}
+.tfile .dot.obj{background:var(--blue)}
+.tfile .lbl{overflow:hidden;text-overflow:ellipsis}
+.hidden{display:none !important}
+
+#previewWrap{border-bottom:1px solid var(--line);padding:0 10px 8px}
+#preview{width:100%;height:120px;background:repeating-conic-gradient(#191d22 0 25%,#20252c 0 50%) 0/16px 16px;border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#preview img{max-width:100%;max-height:100%;object-fit:contain}
+#previewName{font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+#objHead{display:flex;align-items:center;gap:7px}
+#objList{flex:1;overflow:auto;padding:4px 8px 8px;min-height:0}
+.mini-btn{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:2px 7px;font-size:12px;color:var(--ink);margin-left:8px}
+.mini-btn:hover{background:#2c333c}
+.eye{flex:none;width:18px;text-align:center;cursor:pointer;opacity:.85;font-size:12px;user-select:none}
+.eye.off{opacity:.28}
+.objrow{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:grab;color:#c4cbd5;font-size:12px}
+.objrow:hover{background:var(--panel2)}
+.objrow[data-sel="1"]{background:#2f3a2f;color:#fff;box-shadow:0 0 0 1px var(--green) inset}
+.objrow.dragging{opacity:.4}
+.objrow.dz-above{box-shadow:inset 0 3px 0 -1px var(--green)}
+.objrow.dz-below{box-shadow:inset 0 -3px 0 -1px var(--green)}
+.objrow.hid .on,.objrow.hid canvas{opacity:.4}
+.objrow canvas{width:24px;height:24px;background:#0e1115;border-radius:3px;flex:none;object-fit:contain;pointer-events:none}
+.objrow .on{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.objrow .del{background:none;border:none;color:var(--muted);font-size:13px;padding:2px 4px;border-radius:3px}
+.objrow .del:hover{background:#3a2424;color:var(--red)}
+.objrow .zlbl{color:var(--muted);font-size:10px;min-width:20px;text-align:right}
+.grp{margin-bottom:1px}
+.grp-head{display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:4px;cursor:grab;color:#dfe4ea;font-size:12px;background:#20252c}
+.grp-head:hover{background:#262d36}
+.grp-head .arr{width:11px;color:var(--muted);font-size:10px;transition:transform .12s;cursor:pointer;flex:none}
+.grp-head.col .arr{transform:rotate(-90deg)}
+.grp-head .gname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp-head .gname[contenteditable="true"]{outline:1px solid var(--blue);border-radius:3px;padding:0 3px;overflow:visible}
+.grp-head.dz-into{box-shadow:0 0 0 2px var(--gold) inset}
+.grp-head.hid .gname{opacity:.45}
+.grp-body{margin-left:9px;border-left:1px solid var(--line);padding-left:3px}
+
+/* Stage */
+#stage{position:relative;background:#0c0e11;overflow:hidden;border-left:2px solid #1f6f78}
+#canvas{position:absolute;inset:0;display:block;cursor:default}
+#stage[data-mode="paint"] #canvas{cursor:crosshair}
+#stage[data-mode="pan"] #canvas{cursor:grabbing}
+
+#status{position:absolute;left:10px;bottom:10px;background:rgba(20,23,28,.85);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);pointer-events:none}
+#status b{color:var(--gold);font-weight:600}
+
+#empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;color:var(--muted);padding:30px}
+#empty h2{color:var(--ink);font-weight:600;font-size:20px}
+#empty .big{background:var(--gold);color:#1a1205;border:none;border-radius:8px;padding:12px 22px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:9px}
+#empty .big:hover{background:#f1c462}
+#empty p{max-width:460px;line-height:1.55}
+#empty code{background:var(--panel2);padding:2px 6px;border-radius:4px;color:var(--gold)}
+
+#toast{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:9px 16px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:50}
+#toast.show{opacity:1}
+#toast.show.warn{border-color:var(--red)}
+
+/* About / Credits modal */
+.modal-bg{position:fixed;inset:0;background:rgba(6,8,11,.72);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+.modal-bg.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(720px,96vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);overflow:hidden;position:relative}
+.modal-x{position:absolute;top:10px;right:10px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;width:30px;height:30px;font-size:14px;color:var(--muted);z-index:2}
+.modal-x:hover{background:#2c333c;color:var(--ink)}
+.modal-tabs{display:flex;gap:4px;padding:14px 16px 0;border-bottom:1px solid var(--line)}
+.mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:8px 14px;font-size:13px;font-weight:600}
+.mtab[data-active="1"]{color:var(--gold);border-bottom-color:var(--gold)}
+.modal-body{overflow:auto;padding:20px 22px}
+.modal-body h2{color:var(--gold);font-size:17px;margin-bottom:4px}
+.modal-body h3{font-size:13px;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px;color:var(--gold-dim)}
+.modal-body p{line-height:1.6;color:#c8cfd8;margin-bottom:8px}
+.cred-card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px}
+.cred-card .role{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:3px}
+.cred-card .who{font-size:15px;font-weight:700;color:var(--ink)}
+.cred-card a{color:var(--gold);text-decoration:none;border-bottom:1px solid var(--gold-dim)}
+.cred-card a:hover{color:#f1c462}
+.cred-card .desc{color:#aab3bd;font-size:12.5px;margin-top:4px;line-height:1.5}
+.cred-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.cred-grid{grid-template-columns:1fr}}
+.modal-foot{padding:12px 22px;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dlbtn{background:var(--gold);color:#1a1205;border:none;border-radius:7px;padding:9px 16px;font-weight:700;font-size:13px}
+.dlbtn:hover{background:#f1c462}
+pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font-family:ui-monospace,"Cascadia Code",monospace;font-size:11.5px;line-height:1.5;color:#cdd6e0;max-height:46vh;white-space:pre}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:4px 10px;font-size:12.5px;margin:6px 0}
+.kv .k{color:var(--gold-dim);font-family:ui-monospace,monospace}
+.kv .v{color:#c8cfd8}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2c333c;border-radius:5px;border:2px solid var(--panel)}
+::-webkit-scrollbar-thumb:hover{background:#3a424d}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== TOOLBAR ===== -->
+  <div id="toolbar">
+    <div class="brand">🦁 Map Editor <small>Lionheart · Infinity</small></div>
+    <div class="tb-group">
+      <button class="tb-btn" id="btnNew" data-i18n="b_new">🗺️ Nuevo</button>
+      <button class="tb-btn" id="btnOpen" data-i18n="b_open">📂 Abrir</button>
+      <button class="tb-btn" id="btnZax" data-i18n="b_zax" data-i18n-title="z_btn_title" title="">📜 Importar .zax</button>
+      <button class="tb-btn" id="btnSave" data-i18n="b_save">💾 Guardar</button>
+      <button class="tb-btn" id="btnExport" data-i18n="b_export">🖼️ Exportar PNG</button>
+    </div>
+    <div class="tb-group">
+      <button class="tb-btn icon" id="btnUndo" data-i18n-title="t_undo" title="Deshacer (Ctrl+Z)">↶</button>
+      <button class="tb-btn icon" id="btnRedo" data-i18n-title="t_redo" title="Rehacer (Ctrl+Y)">↷</button>
+    </div>
+    <div class="tb-group">
+      <button class="tb-btn icon" id="btnCut" data-i18n-title="t_cut" title="Cortar (Ctrl+X)">✂️</button>
+      <button class="tb-btn icon" id="btnCopy" data-i18n-title="t_copy" title="Copiar (Ctrl+C)">⧉</button>
+      <button class="tb-btn icon" id="btnPaste" data-i18n-title="t_paste" title="Pegar (Ctrl+V)">📋</button>
+    </div>
+    <div class="tb-group">
+      <button class="tb-btn mode-btn mode-paint" id="btnModePaint" data-i18n="b_terrain" title="">🖌️ Terreno</button>
+      <button class="tb-btn mode-btn mode-place" id="btnModePlace" data-active="1" data-i18n="b_objects" title="">🧩 Objetos</button>
+    </div>
+    <div class="tb-group">
+      <button class="tb-btn" id="btnFolder" data-i18n="b_folder">📁 Cargar carpeta Cache…</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="hint" id="modeHint"></div>
+    <div class="tb-group" style="border-right:none;border-left:1px solid var(--line);margin-left:4px">
+      <button class="tb-btn" id="btnLang" title="Idioma / Language">
+        <span class="fl" data-lang="es" data-active="1">🇪🇸</span><span class="fl" data-lang="en">🇬🇧</span>
+      </button>
+      <button class="tb-btn" id="btnAbout" data-i18n="b_credits">ℹ️ Créditos</button>
+    </div>
+  </div>
+
+  <!-- ===== BODY ===== -->
+  <div id="body">
+    <div id="sidebar">
+
+      <div>
+        <div class="panel-h h-mini" data-i18n="h_minimap">Minimapa</div>
+        <div id="minimapWrap"><canvas id="minimap"></canvas></div>
+      </div>
+
+      <div><div class="panel-h h-tree" data-i18n="h_files">Archivos · arrastra al mapa</div></div>
+      <div id="treeWrap">
+        <input id="search" type="text" data-i18n-ph="ph_search" placeholder="Buscar archivo…">
+        <div id="tree"></div>
+      </div>
+
+      <div>
+        <div class="panel-h h-prev" data-i18n="h_preview">Previsualización</div>
+        <div id="previewWrap">
+          <div id="preview"><span style="color:var(--muted);font-size:12px" data-i18n="prev_empty">Selecciona un archivo</span></div>
+          <div id="previewName"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== STAGE ===== -->
+    <div id="stage" data-mode="place">
+      <canvas id="canvas"></canvas>
+      <div id="status">—</div>
+      <div id="empty">
+        <h2 data-i18n="empty_h">Editor de mapas para Infinity Engine</h2>
+        <p data-i18n-html="empty_p">Carga la carpeta <code>Cache</code> de tu proyecto (la que contiene <code>Models</code> y <code>Textures</code> con los <code>.png</code> ya generados). Las rutas se conservan tal cual para que los mapas sean compatibles.</p>
+        <button class="big" id="btnFolder2" data-i18n="empty_btn">📁 Cargar carpeta Cache…</button>
+        <p style="font-size:11px" data-i18n="empty_note">Requiere Chrome o Edge. La carpeta se lee solo en tu equipo; nada se sube a ningún sitio.</p>
+      </div>
+    </div>
+
+    <!-- ===== RIGHT: LAYERS ===== -->
+    <div id="rightbar">
+      <div class="panel-h h-obj" id="objHead">
+        <span data-i18n="h_layers">Capas</span>
+        <span id="objCount" style="margin-left:auto;color:var(--muted)"></span>
+        <button class="mini-btn" id="btnNewGroup" data-i18n-title="t_newfolder" title="">📁＋</button>
+      </div>
+      <div id="objList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== About / Credits modal ===== -->
+<div id="modal" class="modal-bg">
+  <div class="modal">
+    <button class="modal-x" id="modalClose">✕</button>
+    <div class="modal-tabs">
+      <button class="mtab" data-tab="cred" data-active="1" data-i18n="tab_cred">Créditos</button>
+      <button class="mtab" data-tab="fmt" data-i18n="tab_fmt">Formato FRM16 · Decoder</button>
+    </div>
+    <div class="modal-body">
+
+      <section data-pane="cred">
+        <h2 data-i18n="cred_title">Editor de Mapas · Infinity Engine</h2>
+        <p data-i18n-html="cred_intro"></p>
+
+        <h3 data-i18n="cred_h_art">Arte y assets originales</h3>
+        <div class="cred-card">
+          <div class="role" data-i18n="cred_studio_role"></div>
+          <div class="who">Black Isle Studios</div>
+          <div class="desc" data-i18n-html="cred_studio_desc"></div>
+        </div>
+
+        <h3 data-i18n="cred_h_comm">Comunidad de modding</h3>
+        <div class="cred-grid">
+          <div class="cred-card">
+            <div class="role" data-i18n="cred_comm_role"></div>
+            <div class="who"><a href="https://www.shsforums.net/" target="_blank" rel="noopener">Spellhold Studios</a></div>
+            <div class="desc" data-i18n-html="cred_shs_desc"></div>
+          </div>
+          <div class="cred-card">
+            <div class="role" data-i18n="cred_comm_role"></div>
+            <div class="who"><a href="https://www.gibberlings3.net/" target="_blank" rel="noopener">The Gibberlings Three</a></div>
+            <div class="desc" data-i18n-html="cred_g3_desc"></div>
+          </div>
+        </div>
+
+        <h3 data-i18n="cred_h_re">Ingeniería inversa y herramientas</h3>
+        <div class="cred-card">
+          <div class="role" data-i18n="cred_claude_role"></div>
+          <div class="who">Claude — Anthropic</div>
+          <div class="desc" data-i18n-html="cred_claude_desc"></div>
+        </div>
+        <div class="cred-card">
+          <div class="role" data-i18n="cred_edh_role"></div>
+          <div class="who">Edheldil</div>
+          <div class="desc" data-i18n-html="cred_edh_desc"></div>
+        </div>
+      </section>
+
+      <section data-pane="fmt" class="hidden">
+        <h2 data-i18n="fmt_title">Formato FRM16 — resumen</h2>
+        <p data-i18n-html="fmt_intro"></p>
+        <div class="kv">
+          <div class="k">magic</div><div class="v"><code>32 10</code> · <code>01 32 10</code> (MDL16)</div>
+          <div class="k" data-i18n="k_width">ancho</div><div class="v" data-i18n="v_width"></div>
+          <div class="k" data-i18n="k_data">datos</div><div class="v" data-i18n="v_data"></div>
+          <div class="k" data-i18n="k_comp">compresión</div><div class="v" data-i18n="v_comp"></div>
+          <div class="k" data-i18n="k_pixel">píxel</div><div class="v">RGB565 little-endian</div>
+          <div class="k" data-i18n="k_transp">transparencia</div><div class="v" data-i18n="v_transp"></div>
+          <div class="k" data-i18n="k_center">centrado</div><div class="v" data-i18n="v_center"></div>
+        </div>
+        <h3 data-i18n="fmt_dec_h">Decoder (Python · última versión)</h3>
+        <pre class="code" id="decoderView"></pre>
+      </section>
+
+    </div>
+    <div class="modal-foot">
+      <button class="dlbtn" id="dlDecoder" data-i18n="dl_dec">⬇ Descargar lionheart_frm16_decoder.py</button>
+      <span style="color:var(--muted);font-size:12px" data-i18n="dec_req">Requiere Python 3 + Pillow</span>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+<input type="file" id="mapInput" accept=".json" class="hidden">
+<input type="file" id="zaxInput" accept=".zax,.txt" class="hidden">
+
+<!-- embedded decoder source -->
+<script type="text/plain" id="decoderSrc">#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Lionheart: Legacy of the Crusader - FRM16 Decoder  [SOLVED]
+============================================================
+Decodes Lionheart FRM16 images (sprites/renders with transparency),
+both standalone files and those embedded inside MDL16 model files.
+
+Reverse-engineered, undocumented Lionheart image format.
+
+=====================================================================
+FRM16 FORMAT - FULL SPECIFICATION
+=====================================================================
+
+HEADER (32 bytes):
+    +0   2/3 bytes  magic:  32 10       (standalone FRM16)
+                            01 32 10     (FRM16 embedded in MDL16)
+  Fields (FRM16 in MDL16, magic 01 32 10):
+    +3   u16   visible_width   (wv)
+    +5   u16   visible_height  (hv)
+    +7   u16   stored_width    (ws)   <- DECODING WIDTH
+    +9   u16   stored_height   (hs)
+    +13  u16   flags           (0x0044 = RLE)
+    +17  u32   data_size
+
+  NOTE: in some files visible_width is corrupted (e.g. 65529, a 16-bit
+        overflow). ALWAYS use stored_width as the row width.
+
+SUB-HEADER (10 bytes, immediately after the 32-byte header):
+    Layout: 00 + two DWORDs (the 2nd is related to data_size).
+    The byte at offset 40 is 0x00 (a "RUN 0" filler) and offsets 41-42
+    usually contain FF FF (transparent). The actual RLE pixel data
+    starts at offset 42. Starting at 42 removes the colored filler line
+    that otherwise appears at the top/edge of the image.
+
+DATA: 3-case RLE (Edheldil's scheme). Pixels are RGB565 little-endian.
+    ctrl & 0x80          -> SKIP    (ctrl & 0x7F) transparent pixels
+    ctrl & 0x40 (no 0x80)-> LITERAL (ctrl & 0x3F) distinct pixels
+    otherwise            -> RUN     (ctrl & 0x3F) repeats of the next px
+
+  SKIP advances the X position (= transparency). When X reaches the
+  width 'ws', decoding wraps to the next row automatically.
+
+TAIL: there is trailing metadata (04 00 00 00 XX 00 00) but the RLE
+  stops on its own once the pixel data is consumed; no manual trimming
+  of the end of the file is required.
+
+TRANSPARENCY: 0xFFFF (white) = transparent. Black 0x0000 is a real color
+  (shadows / armor), so it is NOT made transparent by default.
+
+CENTERING (key step): rows are stored circularly shifted. Each row must
+  be rotated by a 'shift' amount to reassemble the image. The shift is
+  detected automatically: it is the amount that moves the LEAST opaque
+  column (the sprite's natural "seam") to the edge. This centers the
+  image without needing a per-file constant.
+
+  (Validated against King_Statue, House1, Hamlet_Inn, 90_corner, main,
+   towerwreck, Head1, Bottle_Broke, Stairs_down_D, Block_45_in_A:
+   all decode correctly.)
+"""
+
+import struct
+import sys
+from PIL import Image
+
+
+def rgba565(v, black_transparent=False):
+    """Convert an RGB565 value to an RGBA tuple. 0xFFFF is transparent."""
+    if v is None or v == 0xFFFF:
+        return (0, 0, 0, 0)
+    if black_transparent and v == 0x0000:
+        return (0, 0, 0, 0)
+    return (((v >> 11) & 31) * 255 // 31,
+            ((v >> 5)  & 63) * 255 // 63,
+            ( v        & 31) * 255 // 31, 255)
+
+
+def find_internal_frm16(d):
+    """Return the offset of the 01 32 10 signature inside an MDL16
+    (or 0 for a standalone FRM16). Returns None if not found."""
+    if d[0] == 0x32 and d[1] == 0x10:
+        return 0
+    if d[0] == 0x01 and d[1] == 0x32 and d[2] == 0x10:
+        return 0
+    for i in range(len(d) - 2):
+        if d[i] == 0x01 and d[i+1] == 0x32 and d[i+2] == 0x10:
+            ws = d[i+7] | (d[i+8] << 8)
+            hs = d[i+9] | (d[i+10] << 8)
+            if 0 < ws <= 4096 and 0 < hs <= 4096:
+                return i
+    return None
+
+
+def decode_rle_wrap(d, start, end, width):
+    """3-case RLE with automatic row wrap at 'width'. SKIP advances X."""
+    rows = []
+    row = [None] * width
+    x = 0
+    pos = start
+
+    def flush():
+        nonlocal row, x
+        rows.append(row)
+        row = [None] * width
+        x = 0
+
+    while pos < end and pos < len(d):
+        ctrl = d[pos]; pos += 1
+        if ctrl & 0x80:                          # SKIP (transparent)
+            n = ctrl & 0x7F
+            for _ in range(n):
+                x += 1
+                if x >= width:
+                    flush()
+        elif ctrl & 0x40:                        # LITERAL (distinct pixels)
+            c = ctrl & 0x3F
+            for _ in range(c):
+                if pos + 1 >= len(d):
+                    break
+                row[x] = d[pos] | (d[pos+1] << 8); pos += 2; x += 1
+                if x >= width:
+                    flush()
+        else:                                    # RUN (repeated pixel)
+            c = ctrl & 0x3F
+            if pos + 1 < len(d):
+                v = d[pos] | (d[pos+1] << 8); pos += 2
+                for _ in range(c):
+                    row[x] = v; x += 1
+                    if x >= width:
+                        flush()
+    if any(p is not None for p in row):
+        rows.append(row)
+    return rows
+
+
+def best_shift(rows, width):
+    """Return the shift that moves the least-opaque column to the edge,
+    which centers the sprite (rows are stored circularly shifted)."""
+    col = [0] * width
+    for row in rows:
+        for x in range(width):
+            if x < len(row) and row[x] is not None and row[x] != 0xFFFF:
+                col[x] += 1
+    min_x = min(range(width), key=lambda x: col[x])
+    return (width - min_x) % width
+
+
+def decode_frm16(path, out_path=None, black_transparent=False,
+                 manual_shift=None, flip_v=False):
+    """Decode a FRM16 (or the FRM16 inside an MDL16) to an RGBA image."""
+    d = open(path, 'rb').read()
+    base = find_internal_frm16(d)
+    if base is None:
+        print("Not a recognizable FRM16/MDL16 file.")
+        return None
+
+    ws = d[base+7] | (d[base+8] << 8)
+    hs = d[base+9] | (d[base+10] << 8)
+    flags = d[base+13] | (d[base+14] << 8)
+    print(f"FRM16 @ 0x{base:X}: stored={ws}x{hs} flags=0x{flags:04X}")
+
+    data_start = base + 42          # 32-byte header + 10-byte sub-header
+    data_end = len(d)               # RLE stops on its own; tail is metadata
+
+    rows = decode_rle_wrap(d, data_start, data_end, ws)
+    H = len(rows)
+
+    shift = manual_shift if manual_shift is not None else best_shift(rows, ws)
+    print(f"  rows={H} shift={shift}")
+
+    img = Image.new('RGBA', (ws, H), (0, 0, 0, 0))
+    px = img.load()
+    for y, row in enumerate(rows):
+        dy = (H - 1 - y) if flip_v else y
+        for x in range(min(ws, len(row))):
+            c = rgba565(row[x], black_transparent)
+            if c[3] > 0:
+                nx = (x + shift) % ws
+                px[nx, dy] = c
+
+    if out_path:
+        img.save(out_path)
+        print(f"  saved: {out_path}  ({ws}x{H})")
+    return img
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Usage: python lionheart_frm16_decoder.py file.frm16|.mdl16 "
+              "[output.png] [--black-transp] [--shift N] [--flip]")
+        print()
+        print("Options:")
+        print("  --black-transp   treat black (0x0000) as transparent too")
+        print("  --shift N        force a manual horizontal shift instead of auto")
+        print("  --flip           flip the image vertically")
+        sys.exit(1)
+
+    inp = sys.argv[1]
+    out = None
+    black = '--black-transp' in sys.argv
+    flip = '--flip' in sys.argv
+    mshift = None
+    if '--shift' in sys.argv:
+        mshift = int(sys.argv[sys.argv.index('--shift') + 1])
+    # First non-flag argument after the input path is the output filename
+    for a in sys.argv[2:]:
+        if not a.startswith('--') and a != (str(mshift) if mshift is not None else None):
+            out = a
+            break
+    if out is None:
+        out = inp.rsplit('.', 1)[0] + '_decoded.png'
+
+    decode_frm16(inp, out, black_transparent=black,
+                 manual_shift=mshift, flip_v=flip)
+</script>
+
+<script>
+"use strict";
+/* ============================================================
+   Lionheart Map Editor — single-file (v3)
+   ============================================================ */
+const TILE = 128;
+const $ = id => document.getElementById(id);
+
+/* ---------- i18n ---------- */
+const T = {
+  es:{
+    b_new:"🗺️ Nuevo", b_open:"📂 Abrir", b_save:"💾 Guardar", b_export:"🖼️ Exportar PNG",
+    b_zax:"📜 Importar .zax", z_btn_title:"Cargar un mapa original de Lionheart (.zax)",
+    z_loaded:"Mapa .zax cargado · {n} modelos · {t} texturas", z_models_only:"{n} modelos colocados (carga la carpeta Cache para ver las imágenes)",
+    z_bad:"No parece un .zax válido (falta Width/Height)", z_nocache:"Primero carga la carpeta Cache para resolver los modelos y texturas", z_loading:"Cargando mapa .zax…",
+    b_terrain:"🖌️ Terreno", b_objects:"🧩 Objetos", b_folder:"📁 Cargar carpeta Cache…", b_credits:"ℹ️ Créditos",
+    t_undo:"Deshacer (Ctrl+Z)", t_redo:"Rehacer (Ctrl+Y)", t_cut:"Cortar (Ctrl+X)", t_copy:"Copiar (Ctrl+C)", t_paste:"Pegar (Ctrl+V)",
+    hint_paint:"Modo: Terreno — clic para pintar la textura seleccionada",
+    hint_place:"Modo: Objetos — arrastra un .png al mapa; mueve y reordena con el ratón",
+    h_minimap:"Minimapa", h_files:"Archivos · arrastra al mapa", ph_search:"Buscar archivo…  (escribe para filtrar)",
+    h_preview:"Previsualización", prev_empty:"Selecciona un archivo", h_objects:"Objetos en el mapa",
+    h_layers:"Capas", t_newfolder:"Nueva carpeta", grp_name:"Carpeta",
+    empty_h:"Editor de mapas para Infinity Engine",
+    empty_p:"Carga la carpeta <code>Cache</code> de tu proyecto (la que contiene <code>Models</code> y <code>Textures</code> con los <code>.png</code> ya generados). Las rutas se conservan tal cual para que los mapas sean compatibles.",
+    empty_btn:"📁 Cargar carpeta Cache…",
+    empty_note:"Requiere Chrome o Edge. La carpeta se lee solo en tu equipo; nada se sube a ningún sitio.",
+    u_tiles:"tiles", u_zoom:"zoom", u_cell:"celda", u_sel:"sel",
+    prev_tex:"🟩 Textura · {n}", prev_obj:"🟦 Objeto · {n}",
+    t_loaded:"Cargados {n} PNG", t_noPng:"No se encontraron .png en esa carpeta",
+    t_needTex:"Selecciona una textura primero (panel azul)",
+    p_new:"Tamaño del mapa en casillas (ancho x alto), cada casilla = 128 px:",
+    t_badSize:"Formato no válido (ej. 32 x 32)", t_newMap:"Mapa nuevo {w}×{h}",
+    t_saved:"Mapa guardado (mapa.json)", t_badJson:"JSON no válido", t_notMap:"No es un mapa de este editor",
+    t_mapLoaded:"Mapa cargado", t_mapLoadedMiss:"Mapa cargado · {n} rutas no encontradas (carga la carpeta Cache)",
+    t_prepExport:"Preparando exportación…",
+    c_bigExport:"El mapa mide {w}×{h} px. Es muy grande y la exportación puede fallar o tardar. ¿Continuar?",
+    t_exportFail:"No se pudo exportar (mapa demasiado grande)", t_exported:"Mapa exportado · {w}×{h} px",
+    t_copied:"Objeto copiado", t_cut:"Objeto cortado",
+    tab_cred:"Créditos", tab_fmt:"Formato FRM16 · Decoder",
+    cred_title:"Editor de Mapas · Infinity Engine",
+    cred_intro:"Un editor de mapas para el motor Infinity Engine, basado en la ingeniería inversa —desde cero— del formato de imagen propietario <b>FRM16</b> de <i>Lionheart: Legacy of the Crusader</i>.",
+    cred_h_art:"Arte y assets originales", cred_studio_role:"Estudio",
+    cred_studio_desc:"Creadores de <i>Lionheart: Legacy of the Crusader</i> (2003) y de todo el arte original aquí reutilizado. Con respeto y gratitud por su legado.",
+    cred_h_comm:"Comunidad de modding", cred_comm_role:"Comunidad",
+    cred_shs_desc:"El hogar del modding de Infinity Engine. Décadas de conocimiento compartido que hacen posibles proyectos como este.",
+    cred_g3_desc:"Pilar del ecosistema EET y del modding de Baldur's Gate. Herramientas, tutoriales y una comunidad generosa.",
+    cred_h_re:"Ingeniería inversa y herramientas", cred_claude_role:"Desarrollo · ingeniería inversa del formato FRM16",
+    cred_claude_desc:"Decodificación byte a byte del formato FRM16 (RLE, centrado automático, sub-cabecera en offset 42), el conversor por lotes y este editor. Un formato propietario y sin documentar, resuelto y validado contra archivos reales. Con honestidad: un resultado difícil de imaginar al empezar.",
+    cred_edh_role:"Base técnica del RLE",
+    cred_edh_desc:"Por el esquema de 3 casos (SKIP / LITERAL / RUN) que sirvió de punto de partida para decodificar los píxeles.",
+    fmt_title:"Formato FRM16 — resumen",
+    fmt_intro:"Imágenes de <i>Lionheart</i> (sprites y objetos con transparencia), sueltas o embebidas dentro de archivos MDL16.",
+    k_width:"ancho", v_width:"usar stored_width (+7); visible_width a veces viene corrupto",
+    k_data:"datos", v_data:"empiezan en offset 42 (cabecera 32 + sub-cabecera 10)",
+    k_comp:"compresión", v_comp:"RLE de 3 casos: SKIP 0x80 · LITERAL 0x40 · RUN resto",
+    k_pixel:"píxel", k_transp:"transparencia", v_transp:"0xFFFF blanco; el negro 0x0000 es color real",
+    k_center:"centrado", v_center:"filas rotadas; se lleva la columna menos opaca al borde (automático)",
+    fmt_dec_h:"Decoder (Python · última versión)",
+    dl_dec:"⬇ Descargar lionheart_frm16_decoder.py", dec_req:"Requiere Python 3 + Pillow",
+  },
+  en:{
+    b_new:"🗺️ New", b_open:"📂 Open", b_save:"💾 Save", b_export:"🖼️ Export PNG",
+    b_zax:"📜 Import .zax", z_btn_title:"Load an original Lionheart map (.zax)",
+    z_loaded:"Loaded .zax · {n} models · {t} textures", z_models_only:"{n} models placed (load the Cache folder to see the images)",
+    z_bad:"Not a valid .zax (missing Width/Height)", z_nocache:"Load the Cache folder first to resolve models and textures", z_loading:"Loading .zax map…",
+    b_terrain:"🖌️ Terrain", b_objects:"🧩 Objects", b_folder:"📁 Load Cache folder…", b_credits:"ℹ️ Credits",
+    t_undo:"Undo (Ctrl+Z)", t_redo:"Redo (Ctrl+Y)", t_cut:"Cut (Ctrl+X)", t_copy:"Copy (Ctrl+C)", t_paste:"Paste (Ctrl+V)",
+    hint_paint:"Mode: Terrain — click to paint the selected texture",
+    hint_place:"Mode: Objects — drag a .png onto the map; move and reorder with the mouse",
+    h_minimap:"Minimap", h_files:"Files · drag onto the map", ph_search:"Search file…  (type to filter)",
+    h_preview:"Preview", prev_empty:"Select a file", h_objects:"Objects on the map",
+    h_layers:"Layers", t_newfolder:"New folder", grp_name:"Folder",
+    empty_h:"Map editor for the Infinity Engine",
+    empty_p:"Load your project's <code>Cache</code> folder (the one with <code>Models</code> and <code>Textures</code> and the generated <code>.png</code> files). Paths are kept exactly as-is so maps stay compatible.",
+    empty_btn:"📁 Load Cache folder…",
+    empty_note:"Requires Chrome or Edge. The folder is read only on your computer; nothing is uploaded.",
+    u_tiles:"tiles", u_zoom:"zoom", u_cell:"cell", u_sel:"sel",
+    prev_tex:"🟩 Texture · {n}", prev_obj:"🟦 Object · {n}",
+    t_loaded:"Loaded {n} PNG", t_noPng:"No .png found in that folder",
+    t_needTex:"Select a texture first (blue panel)",
+    p_new:"Map size in tiles (width x height), each tile = 128 px:",
+    t_badSize:"Invalid format (e.g. 32 x 32)", t_newMap:"New map {w}×{h}",
+    t_saved:"Map saved (mapa.json)", t_badJson:"Invalid JSON", t_notMap:"Not a map from this editor",
+    t_mapLoaded:"Map loaded", t_mapLoadedMiss:"Map loaded · {n} paths not found (load the Cache folder)",
+    t_prepExport:"Preparing export…",
+    c_bigExport:"The map is {w}×{h} px. It's very large and export may fail or be slow. Continue?",
+    t_exportFail:"Export failed (map too large)", t_exported:"Map exported · {w}×{h} px",
+    t_copied:"Object copied", t_cut:"Object cut",
+    tab_cred:"Credits", tab_fmt:"FRM16 format · Decoder",
+    cred_title:"Map Editor · Infinity Engine",
+    cred_intro:"A map editor for the Infinity Engine, based on reverse-engineering —from scratch— the proprietary <b>FRM16</b> image format of <i>Lionheart: Legacy of the Crusader</i>.",
+    cred_h_art:"Original art & assets", cred_studio_role:"Studio",
+    cred_studio_desc:"Creators of <i>Lionheart: Legacy of the Crusader</i> (2003) and of all the original art reused here. With respect and gratitude for their legacy.",
+    cred_h_comm:"Modding community", cred_comm_role:"Community",
+    cred_shs_desc:"The home of Infinity Engine modding. Decades of shared knowledge that make projects like this possible.",
+    cred_g3_desc:"A pillar of the EET ecosystem and of Baldur's Gate modding. Tools, tutorials and a generous community.",
+    cred_h_re:"Reverse engineering & tools", cred_claude_role:"Development · reverse engineering of the FRM16 format",
+    cred_claude_desc:"Byte-by-byte decoding of the FRM16 format (RLE, automatic centering, sub-header at offset 42), the batch converter and this editor. A proprietary, undocumented format, solved and validated against real files. Honestly: a result hard to imagine at the start.",
+    cred_edh_role:"RLE technical base",
+    cred_edh_desc:"For the 3-case scheme (SKIP / LITERAL / RUN) that was the starting point for decoding the pixels.",
+    fmt_title:"FRM16 format — summary",
+    fmt_intro:"<i>Lionheart</i> images (sprites and objects with transparency), standalone or embedded inside MDL16 files.",
+    k_width:"width", v_width:"use stored_width (+7); visible_width is sometimes corrupted",
+    k_data:"data", v_data:"start at offset 42 (32-byte header + 10-byte sub-header)",
+    k_comp:"compression", v_comp:"3-case RLE: SKIP 0x80 · LITERAL 0x40 · RUN otherwise",
+    k_pixel:"pixel", k_transp:"transparency", v_transp:"0xFFFF white; black 0x0000 is a real color",
+    k_center:"centering", v_center:"rows are rotated; the least-opaque column is moved to the edge (automatic)",
+    fmt_dec_h:"Decoder (Python · latest version)",
+    dl_dec:"⬇ Download lionheart_frm16_decoder.py", dec_req:"Requires Python 3 + Pillow",
+  }
+};
+function t(key, p){
+  let s = (T[state.lang] && T[state.lang][key]) ?? T.es[key] ?? key;
+  if(p) for(const k in p) s = s.replace(new RegExp('\\{'+k+'\\}','g'), p[k]);
+  return s;
+}
+function applyLang(){
+  document.querySelectorAll('[data-i18n]').forEach(el=> el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-html]').forEach(el=> el.innerHTML = t(el.dataset.i18nHtml));
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=> el.placeholder = t(el.dataset.i18nPh));
+  document.querySelectorAll('[data-i18n-title]').forEach(el=> el.title = t(el.dataset.i18nTitle));
+  document.documentElement.lang = state.lang;
+  setModeHint();
+  renderObjList();
+  updateStatus();
+  if(state.selectedPath) showPreview(state.selectedPath);
+  else $('preview').innerHTML = `<span style="color:var(--muted);font-size:12px">${t('prev_empty')}</span>`;
+}
+function setLang(l){
+  state.lang = l;
+  document.querySelectorAll('#btnLang .fl').forEach(s=> s.dataset.active = s.dataset.lang===l?'1':'0');
+  applyLang();
+}
+$('btnLang').addEventListener('click', e=>{
+  const f = e.target.closest('.fl'); if(f) setLang(f.dataset.lang);
+});
+
+/* ---------- state ---------- */
+const state = {
+  lang:'es',
+  files:new Map(), tree:null, imgCache:new Map(), pending:new Set(),
+  mode:'place', selectedPath:null, paintTexture:null,
+  map:newMap(32,32),
+  cam:{x:-200,y:-120,zoom:0.5},
+  selObj:null, clipboard:null, undo:[], redo:[], dirty:true,
+};
+function newMap(gw,gh){
+  return { tileSize:TILE, gridW:gw, gridH:gh,
+    terrain:Array.from({length:gh},()=>Array(gw).fill(null)),
+    objects:[], groups:[], nextId:1, nextGroupId:1 };
+}
+const toBack = p => p.replace(/\//g,'\\');
+const norm   = p => p.replace(/\\/g,'/').toLowerCase();
+function classify(rel){ const l=rel.toLowerCase(); if(l.includes('/textures/'))return 'tex'; if(l.includes('/models/'))return 'obj'; return 'obj'; }
+
+/* ============================================================ FOLDER LOADING */
+$('folderInput').addEventListener('change', e=> loadFolder(e.target.files));
+$('btnFolder').onclick = ()=> $('folderInput').click();
+$('btnFolder2').onclick = ()=> $('folderInput').click();
+
+function loadFolder(fileList){
+  const files=[...fileList].filter(f=>/\.png$/i.test(f.name));
+  if(!files.length){ toast(t('t_noPng'), true); return; }
+  state.files.clear(); state.imgCache.clear();
+  for(const f of files){
+    let rel=f.webkitRelativePath||f.name;
+    const idx=rel.toLowerCase().indexOf('cache/');
+    if(idx>=0) rel=rel.slice(idx);
+    state.files.set(toBack(rel), { file:f, kind:classify(rel), name:f.name.replace(/\.png$/i,''), rel });
+  }
+  buildTree(); renderTree();
+  $('empty').style.display='none';
+  toast(t('t_loaded',{n:state.files.size}));
+  markDirty(); renderMinimap();
+}
+
+/* ============================================================ TREE */
+function buildTree(){
+  const root={name:'Cache',dirs:new Map(),files:[],path:'Cache'};
+  for(const [key] of state.files){
+    const parts=key.split('\\'); let node=root;
+    for(let i=1;i<parts.length-1;i++){
+      const seg=parts[i];
+      if(!node.dirs.has(seg)) node.dirs.set(seg,{name:seg,dirs:new Map(),files:[],path:parts.slice(0,i+1).join('\\')});
+      node=node.dirs.get(seg);
+    }
+    node.files.push({name:parts[parts.length-1], key, kind:state.files.get(key).kind});
+  }
+  state.tree=root;
+}
+function renderTree(filter){
+  const host=$('tree'); host.innerHTML='';
+  host.appendChild(renderNode(state.tree, 0, (filter||'').trim().toLowerCase(), true));
+}
+function activeKind(){ return state.mode==='paint' ? 'tex' : 'obj'; }
+function renderNode(node, depth, filter, isRoot){
+  const frag=document.createDocumentFragment();
+  const kind=activeKind();
+  const dirs=[...node.dirs.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  for(const d of dirs){
+    if(countFiles(d,kind)===0) continue;
+    if(filter && !subtreeMatches(d,filter,kind)) continue;
+    const wrap=document.createElement('div');
+    const row=document.createElement('div'); row.className='tfolder';
+    if(filter||isRoot) row.classList.add('open');
+    row.innerHTML=`<span class="arr">▶</span><span class="fname">📁 ${esc(d.name)}</span><span class="badge">${countFiles(d,kind)}</span>`;
+    const kids=document.createElement('div'); kids.className='tchildren';
+    if(!(filter||isRoot)) kids.style.display='none';
+    kids.appendChild(renderNode(d, depth+1, filter, false));
+    row.onclick=()=>{ const open=row.classList.toggle('open'); kids.style.display=open?'':'none'; };
+    wrap.appendChild(row); wrap.appendChild(kids); frag.appendChild(wrap);
+  }
+  const files=[...node.files].sort((a,b)=>a.name.localeCompare(b.name));
+  for(const fl of files){
+    if(fl.kind!==kind) continue;
+    if(filter && !fl.name.toLowerCase().includes(filter)) continue;
+    const el=document.createElement('div'); el.className='tfile'; el.draggable=true; el.dataset.key=fl.key;
+    el.innerHTML=`<span class="dot ${fl.kind==='tex'?'tex':'obj'}"></span><span class="lbl">${esc(fl.name.replace(/\.png$/i,''))}</span>`;
+    el.onclick=()=>selectFile(fl.key, el);
+    el.ondragstart=ev=>{ ev.dataTransfer.setData('text/path', fl.key); ev.dataTransfer.effectAllowed='copy'; };
+    frag.appendChild(el);
+  }
+  const box=document.createElement('div'); box.appendChild(frag); return box;
+}
+function subtreeMatches(node,filter,kind){
+  for(const fl of node.files) if(fl.kind===kind && fl.name.toLowerCase().includes(filter)) return true;
+  for(const d of node.dirs.values()) if(subtreeMatches(d,filter,kind)) return true;
+  return false;
+}
+function countFiles(node,kind){
+  let n=0; for(const fl of node.files) if(fl.kind===kind) n++;
+  for(const d of node.dirs.values()) n+=countFiles(d,kind); return n;
+}
+$('search').addEventListener('input', e=> renderTree(e.target.value));
+
+function selectFile(key, el){
+  state.selectedPath=key;
+  document.querySelectorAll('.tfile[data-sel="1"]').forEach(n=>n.dataset.sel='0');
+  if(el) el.dataset.sel='1';
+  const info=state.files.get(key); showPreview(key);
+  if(info && info.kind==='tex') state.paintTexture=key;
+  updateStatus();
+}
+function showPreview(key){
+  const info=state.files.get(key); if(!info) return;
+  const box=$('preview'); box.innerHTML='';
+  const img=document.createElement('img'); img.src=URL.createObjectURL(info.file);
+  img.onload=()=>URL.revokeObjectURL(img.src); box.appendChild(img);
+  $('previewName').textContent = info.kind==='tex' ? t('prev_tex',{n:info.name}) : t('prev_obj',{n:info.name});
+}
+
+/* ============================================================ IMAGE CACHE */
+function getImage(key){
+  if(state.imgCache.has(key)) return state.imgCache.get(key);
+  if(state.pending.has(key)) return null;
+  const info=state.files.get(key); if(!info) return null;
+  state.pending.add(key);
+  const img=new Image();
+  img.onload=()=>{ state.imgCache.set(key,img); state.pending.delete(key); markDirty(); renderMinimap(); };
+  img.onerror=()=>state.pending.delete(key);
+  img.src=URL.createObjectURL(info.file);
+  return null;
+}
+function ensureLoaded(keys){
+  const proms=[];
+  for(const key of keys){
+    if(state.imgCache.has(key)) continue;
+    const info=state.files.get(key); if(!info) continue;
+    proms.push(new Promise(res=>{ const img=new Image();
+      img.onload=()=>{ state.imgCache.set(key,img); res(); };
+      img.onerror=()=>res(); img.src=URL.createObjectURL(info.file); }));
+  }
+  return Promise.all(proms);
+}
+
+/* ============================================================ CANVAS / CAMERA */
+const cv=$('canvas'), ctx=cv.getContext('2d'), stage=$('stage');
+function resizeCanvas(){
+  const r=stage.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  cv.width=Math.floor(r.width*dpr); cv.height=Math.floor(r.height*dpr);
+  cv.style.width=r.width+'px'; cv.style.height=r.height+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0); markDirty();
+}
+new ResizeObserver(resizeCanvas).observe(stage);
+const cam=state.cam;
+const w2sX=wx=>(wx-cam.x)*cam.zoom, w2sY=wy=>(wy-cam.y)*cam.zoom;
+const s2wX=sx=>sx/cam.zoom+cam.x, s2wY=sy=>sy/cam.zoom+cam.y;
+function markDirty(){ state.dirty=true; }
+function loop(){ if(state.dirty){ draw(); state.dirty=false; } requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+function draw(){
+  const W=cv.clientWidth, H=cv.clientHeight;
+  ctx.clearRect(0,0,W,H); ctx.fillStyle='#0c0e11'; ctx.fillRect(0,0,W,H);
+  const m=state.map, mapW=m.gridW*TILE, mapH=m.gridH*TILE;
+  ctx.fillStyle='#15191e'; ctx.fillRect(w2sX(0),w2sY(0),mapW*cam.zoom,mapH*cam.zoom);
+
+  const c0=Math.max(0,Math.floor(s2wX(0)/TILE)), r0=Math.max(0,Math.floor(s2wY(0)/TILE));
+  const c1=Math.min(m.gridW-1,Math.ceil(s2wX(W)/TILE)), r1=Math.min(m.gridH-1,Math.ceil(s2wY(H)/TILE));
+
+  // terrain — smoothing OFF (crisp tiles, no seams), 1px overlap
+  ctx.imageSmoothingEnabled=false;
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    const key=m.terrain[r][c]; if(!key) continue;
+    const img=getImage(key);
+    const x=w2sX(c*TILE), y=w2sY(r*TILE), s=TILE*cam.zoom;
+    if(img) ctx.drawImage(img,x,y,Math.ceil(s)+1,Math.ceil(s)+1);
+    else { ctx.fillStyle='#23282f'; ctx.fillRect(x,y,s,s); }
+  }
+  // grid lines (screen only)
+  if(cam.zoom>0.18){
+    ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.lineWidth=1; ctx.beginPath();
+    for(let c=c0;c<=c1+1;c++){ const x=w2sX(c*TILE); ctx.moveTo(x,w2sY(r0*TILE)); ctx.lineTo(x,w2sY((r1+1)*TILE)); }
+    for(let r=r0;r<=r1+1;r++){ const y=w2sY(r*TILE); ctx.moveTo(w2sX(c0*TILE),y); ctx.lineTo(w2sX((c1+1)*TILE),y); }
+    ctx.stroke();
+  }
+  ctx.strokeStyle='#2c333c'; ctx.lineWidth=2; ctx.strokeRect(w2sX(0),w2sY(0),mapW*cam.zoom,mapH*cam.zoom);
+
+  // objects — smoothing ON
+  ctx.imageSmoothingEnabled=true;
+  for(const o of m.objects){
+    if(!effVisible(o)) continue;
+    const img=getImage(o.path);
+    const x=w2sX(o.x), y=w2sY(o.y), ww=o.w*cam.zoom, hh=o.h*cam.zoom;
+    if(img) ctx.drawImage(img,x,y,ww,hh);
+    else { ctx.fillStyle='rgba(120,140,170,.25)'; ctx.fillRect(x,y,ww,hh); ctx.strokeStyle='#46505c'; ctx.strokeRect(x,y,ww,hh); }
+    if(o.id===state.selObj){
+      ctx.strokeStyle='#e8b54b'; ctx.lineWidth=2; ctx.strokeRect(x-1,y-1,ww+2,hh+2);
+      ctx.fillStyle='#e8b54b'; const tk=4;
+      [[x,y],[x+ww,y],[x,y+hh],[x+ww,y+hh]].forEach(([px,py])=>ctx.fillRect(px-tk,py-tk,tk*2,tk*2));
+    }
+  }
+}
+
+/* ============================================================ MINIMAP */
+const mm=$('minimap'), mmx=mm.getContext('2d');
+function renderMinimap(){
+  const m=state.map, W=mm.clientWidth, H=mm.clientHeight, dpr=window.devicePixelRatio||1;
+  if(mm.width!==W*dpr){ mm.width=W*dpr; mm.height=H*dpr; }
+  mmx.setTransform(dpr,0,0,dpr,0,0); mmx.clearRect(0,0,W,H);
+  const mapW=m.gridW*TILE, mapH=m.gridH*TILE, sc=Math.min(W/mapW,H/mapH);
+  const ox=(W-mapW*sc)/2, oy=(H-mapH*sc)/2; mm._sc=sc; mm._ox=ox; mm._oy=oy;
+  mmx.fillStyle='#15191e'; mmx.fillRect(ox,oy,mapW*sc,mapH*sc);
+  mmx.imageSmoothingEnabled=false;
+  for(let r=0;r<m.gridH;r++) for(let c=0;c<m.gridW;c++){
+    const key=m.terrain[r][c]; if(!key) continue;
+    const img=state.imgCache.get(key); const x=ox+c*TILE*sc, y=oy+r*TILE*sc, s=TILE*sc+0.6;
+    if(img) mmx.drawImage(img,x,y,s,s); else { mmx.fillStyle='#2a2f37'; mmx.fillRect(x,y,s,s); }
+  }
+  mmx.fillStyle='#7fd08c';
+  for(const o of m.objects){ if(!effVisible(o)) continue; mmx.fillRect(ox+(o.x+o.w/2)*sc-1, oy+(o.y+o.h/2)*sc-1, 2,2); }
+  const vx=ox+cam.x*sc, vy=oy+cam.y*sc, vw=(cv.clientWidth/cam.zoom)*sc, vh=(cv.clientHeight/cam.zoom)*sc;
+  mmx.strokeStyle='#e3c64b'; mmx.lineWidth=1.5; mmx.strokeRect(vx,vy,vw,vh);
+}
+mm.addEventListener('mousedown', mmJump);
+mm.addEventListener('mousemove', e=>{ if(e.buttons&1) mmJump(e); });
+function mmJump(e){
+  const r=mm.getBoundingClientRect();
+  const wx=(e.clientX-r.left-mm._ox)/mm._sc, wy=(e.clientY-r.top-mm._oy)/mm._sc;
+  cam.x=wx-(cv.clientWidth/cam.zoom)/2; cam.y=wy-(cv.clientHeight/cam.zoom)/2;
+  markDirty(); renderMinimap();
+}
+
+/* ============================================================ MOUSE */
+let dragMode=null, panStart=null, objStart=null, spaceDown=false;
+cv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const wx=s2wX(mx), wy=s2wY(my), f=e.deltaY<0?1.12:1/1.12;
+  cam.zoom=Math.min(4,Math.max(0.05,cam.zoom*f)); cam.x=wx-mx/cam.zoom; cam.y=wy-my/cam.zoom;
+  markDirty(); renderMinimap();
+},{passive:false});
+
+cv.addEventListener('mousedown', e=>{
+  const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const wx=s2wX(mx), wy=s2wY(my);
+  if(e.button===1 || spaceDown){ dragMode='pan'; panStart={mx,my,cx:cam.x,cy:cam.y}; stage.dataset.mode='pan'; return; }
+  if(state.mode==='paint' && e.button===0){ dragMode='paint'; pushUndo(); paintAt(wx,wy); return; }
+  if(e.button===0){
+    const hit=hitObject(wx,wy);
+    if(hit){ selectObject(hit.id); dragMode='obj'; objStart={ox:hit.x,oy:hit.y,mx,my}; pushUndo(); }
+    else { dragMode='pan'; panStart={mx,my,cx:cam.x,cy:cam.y}; stage.dataset.mode='pan'; deselect(); }
+  }
+});
+window.addEventListener('mousemove', e=>{
+  if(!dragMode) return;
+  const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  if(dragMode==='pan'){ cam.x=panStart.cx-(mx-panStart.mx)/cam.zoom; cam.y=panStart.cy-(my-panStart.my)/cam.zoom; markDirty(); renderMinimap(); }
+  else if(dragMode==='paint'){ paintAt(s2wX(mx),s2wY(my)); }
+  else if(dragMode==='obj'){ const o=obj(state.selObj); if(o){ o.x=Math.round(objStart.ox+(mx-objStart.mx)/cam.zoom); o.y=Math.round(objStart.oy+(my-objStart.my)/cam.zoom); markDirty(); updateStatus(); renderMinimap(); } }
+});
+window.addEventListener('mouseup', ()=>{ if(dragMode==='paint'||dragMode==='obj') renderMinimap(); dragMode=null; stage.dataset.mode=state.mode; });
+cv.addEventListener('mousemove', e=>{ const r=cv.getBoundingClientRect(); updateStatus(s2wX(e.clientX-r.left), s2wY(e.clientY-r.top)); });
+
+function paintAt(wx,wy){
+  const m=state.map, c=Math.floor(wx/TILE), r=Math.floor(wy/TILE);
+  if(c<0||r<0||c>=m.gridW||r>=m.gridH) return;
+  if(!state.paintTexture){ toast(t('t_needTex'), true); return; }
+  if(m.terrain[r][c]!==state.paintTexture){ m.terrain[r][c]=state.paintTexture; markDirty(); }
+}
+function hitObject(wx,wy){
+  const o=state.map.objects;
+  for(let i=o.length-1;i>=0;i--){ const b=o[i]; if(effVisible(b) && wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h) return b; }
+  return null;
+}
+
+/* ============================================================ DRAG-DROP place */
+cv.addEventListener('dragover', e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+cv.addEventListener('drop', e=>{
+  e.preventDefault();
+  const key=e.dataTransfer.getData('text/path'); if(!key) return;
+  const r=cv.getBoundingClientRect(), wx=s2wX(e.clientX-r.left), wy=s2wY(e.clientY-r.top);
+  const info=state.files.get(key); if(!info) return;
+  if(info.kind==='tex'){
+    const m=state.map, c=Math.floor(wx/TILE), rr=Math.floor(wy/TILE);
+    if(c>=0&&rr>=0&&c<m.gridW&&rr<m.gridH){ pushUndo(); m.terrain[rr][c]=key; markDirty(); renderMinimap(); }
+    return;
+  }
+  placeObject(key, wx, wy);
+});
+function placeObject(key, wx, wy){
+  const info=state.files.get(key); if(!info) return; pushUndo();
+  const img=getImage(key);
+  const finish=(iw,ih)=>{ const o={id:state.map.nextId++,path:key,x:Math.round(wx-iw/2),y:Math.round(wy-ih/2),w:iw,h:ih,visible:true,groupId:null};
+    state.map.objects.push(o); selectObject(o.id); renderObjList(); markDirty(); renderMinimap(); };
+  if(img) finish(img.naturalWidth,img.naturalHeight);
+  else { const p=new Image(); p.onload=()=>finish(p.naturalWidth,p.naturalHeight); p.onerror=()=>finish(128,128); p.src=URL.createObjectURL(info.file); }
+}
+
+/* ============================================================ LAYERS panel (objects + groups) */
+const obj = id => state.map.objects.find(o=>o.id===id);
+const group = gid => state.map.groups.find(g=>g.id===gid);
+function effVisible(o){
+  if(o.visible===false) return false;
+  if(o.groupId!=null){ const g=group(o.groupId); if(g && g.visible===false) return false; }
+  return true;
+}
+function selectObject(id){
+  state.selObj=id; markDirty();
+  document.querySelectorAll('.objrow[data-sel="1"]').forEach(n=>n.dataset.sel='0');
+  const row=document.querySelector(`.objrow[data-id="${id}"]`); if(row){ row.dataset.sel='1'; row.scrollIntoView({block:'nearest'}); }
+  updateStatus();
+}
+function deselect(){ state.selObj=null; markDirty(); document.querySelectorAll('.objrow[data-sel="1"]').forEach(n=>n.dataset.sel='0'); }
+
+let reorderId=null;
+function clearMarks(){ document.querySelectorAll('.dz-above,.dz-below,.dz-into').forEach(n=>n.classList.remove('dz-above','dz-below','dz-into')); }
+
+/* ---- render the layer tree (top z first) ---- */
+function renderObjList(){
+  const host=$('objList'); host.innerHTML='';
+  const objs=state.map.objects;
+  $('objCount').textContent = objs.length ? `${objs.length}` : '';
+  const shown=new Set();
+  for(let i=objs.length-1;i>=0;i--){
+    const o=objs[i];
+    if(o.groupId!=null && group(o.groupId)){
+      const g=group(o.groupId);
+      if(shown.has(g.id)) continue;
+      shown.add(g.id);
+      host.appendChild(makeGroupRow(g, objs));
+    } else {
+      host.appendChild(makeObjRow(o));
+    }
+  }
+  // empty groups (no members yet) shown at the top so you can drag images into them
+  for(const g of state.map.groups){ if(!shown.has(g.id)){ host.insertBefore(makeGroupRow(g,objs), host.firstChild); shown.add(g.id); } }
+}
+function makeObjRow(o){
+  const info=state.files.get(o.path);
+  const row=document.createElement('div'); row.className='objrow'; row.dataset.id=o.id; row.draggable=true;
+  if(o.id===state.selObj) row.dataset.sel='1';
+  if(!effVisible(o)) row.classList.add('hid');
+  const eye=document.createElement('span'); eye.className='eye'+(o.visible===false?' off':''); eye.textContent='👁';
+  eye.title='Mostrar / ocultar'; eye.onclick=ev=>{ ev.stopPropagation(); toggleObjVis(o.id); };
+  const thumb=document.createElement('canvas'); thumb.width=24; thumb.height=24; drawThumb(thumb,o.path);
+  const name=document.createElement('div'); name.className='on'; name.textContent=info?info.name:o.path.split('\\').pop();
+  const del=document.createElement('button'); del.className='del'; del.textContent='🗑';
+  del.onclick=ev=>{ ev.stopPropagation(); deleteObject(o.id); };
+  row.append(eye,thumb,name,del);
+  row.onclick=()=>selectObject(o.id);
+  row.ondblclick=()=>centerOnObject(o.id);
+  row.ondragstart=ev=>{ reorderId=o.id; ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain',''); row.classList.add('dragging'); ev.stopPropagation(); };
+  row.ondragend=()=>{ reorderId=null; row.classList.remove('dragging'); clearMarks(); };
+  row.ondragover=ev=>{ if(reorderId==null||reorderId===o.id)return; ev.preventDefault(); ev.dataTransfer.dropEffect='move';
+    const r=row.getBoundingClientRect(); const after=(ev.clientY-r.top)>r.height/2; clearMarks(); row.classList.add(after?'dz-below':'dz-above'); };
+  row.ondrop=ev=>{ if(reorderId==null)return; ev.preventDefault(); ev.stopPropagation();
+    const r=row.getBoundingClientRect(); const after=(ev.clientY-r.top)>r.height/2; clearMarks(); dropOnObject(reorderId,o.id,after); };
+  return row;
+}
+function makeGroupRow(g, objs){
+  const wrap=document.createElement('div'); wrap.className='grp';
+  const head=document.createElement('div'); head.className='grp-head'+(g.collapsed?' col':'')+(g.visible===false?' hid':''); head.dataset.gid=g.id;
+  const arr=document.createElement('span'); arr.className='arr'; arr.textContent='▾';
+  arr.onclick=ev=>{ ev.stopPropagation(); toggleCollapse(g.id); };
+  const eye=document.createElement('span'); eye.className='eye'+(g.visible===false?' off':''); eye.textContent='👁';
+  eye.title='Mostrar / ocultar carpeta'; eye.onclick=ev=>{ ev.stopPropagation(); toggleGroupVis(g.id); };
+  const ico=document.createElement('span'); ico.textContent='📁'; ico.style.flex='none';
+  const name=document.createElement('span'); name.className='gname'; name.textContent=g.name;
+  name.title='Doble clic para renombrar'; name.ondblclick=ev=>{ ev.stopPropagation(); editGroupName(name,g); };
+  const del=document.createElement('button'); del.className='del'; del.textContent='🗑'; del.title='Quitar carpeta (conserva las imágenes)';
+  del.onclick=ev=>{ ev.stopPropagation(); deleteGroup(g.id); };
+  head.append(arr,eye,ico,name,del);
+  // drop target: drop an image here to put it in this folder
+  head.ondragover=ev=>{ if(reorderId==null)return; ev.preventDefault(); ev.dataTransfer.dropEffect='move'; clearMarks(); head.classList.add('dz-into'); };
+  head.ondragleave=()=>head.classList.remove('dz-into');
+  head.ondrop=ev=>{ if(reorderId==null)return; ev.preventDefault(); ev.stopPropagation(); head.classList.remove('dz-into'); setObjGroup(reorderId, g.id); };
+  wrap.appendChild(head);
+  if(!g.collapsed){
+    const body=document.createElement('div'); body.className='grp-body';
+    for(let i=objs.length-1;i>=0;i--) if(objs[i].groupId===g.id) body.appendChild(makeObjRow(objs[i]));
+    wrap.appendChild(body);
+  }
+  return wrap;
+}
+
+/* ---- layer / group operations ---- */
+function newGroup(){
+  pushUndo();
+  const gid=state.map.nextGroupId++;
+  state.map.groups.push({id:gid, name:t('grp_name')+' '+gid, collapsed:false, visible:true});
+  renderObjList();
+}
+function toggleObjVis(id){ const o=obj(id); if(!o)return; pushUndo(); o.visible=o.visible===false; renderObjList(); markDirty(); renderMinimap(); }
+function toggleGroupVis(gid){ const g=group(gid); if(!g)return; pushUndo(); g.visible=g.visible===false; renderObjList(); markDirty(); renderMinimap(); }
+function toggleCollapse(gid){ const g=group(gid); if(!g)return; g.collapsed=!g.collapsed; renderObjList(); }
+function deleteGroup(gid){
+  pushUndo();
+  for(const o of state.map.objects) if(o.groupId===gid) o.groupId=null;   // keep the images, just drop the folder
+  state.map.groups=state.map.groups.filter(g=>g.id!==gid);
+  renderObjList(); markDirty();
+}
+function setObjGroup(objId, gid){
+  const arr=state.map.objects, o=arr.find(x=>x.id===objId); if(!o)return;
+  pushUndo();
+  o.groupId=gid;
+  if(gid!=null){
+    const members=arr.filter(x=>x!==o && x.groupId===gid);
+    arr.splice(arr.indexOf(o),1);
+    if(members.length) arr.splice(arr.indexOf(members[members.length-1])+1,0,o);
+    else arr.push(o);
+  }
+  renderObjList(); markDirty(); renderMinimap();
+}
+function editGroupName(span, g){
+  span.contentEditable='true'; span.focus();
+  const range=document.createRange(); range.selectNodeContents(span);
+  const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+  const done=()=>{ span.contentEditable='false'; g.name=(span.textContent.trim()||g.name); span.textContent=g.name; span.onblur=null; };
+  span.onblur=done;
+  span.onkeydown=ev=>{ ev.stopPropagation(); if(ev.key==='Enter'){ ev.preventDefault(); span.blur(); } else if(ev.key==='Escape'){ span.textContent=g.name; span.blur(); } };
+}
+
+/* reorder in z (and inherit drop target's folder) */
+function dropOnObject(dragId, targetId, after){
+  if(dragId===targetId) return;
+  const arr=state.map.objects;
+  const dragged=arr.find(o=>o.id===dragId), target=arr.find(o=>o.id===targetId);
+  if(!dragged||!target) return;
+  pushUndo();
+  dragged.groupId = target.groupId;
+  arr.splice(arr.indexOf(dragged),1);
+  const ti=arr.indexOf(target);
+  arr.splice(after?ti:ti+1, 0, dragged);     // "after"=below target visually=lower z
+  renderObjList(); markDirty(); renderMinimap();
+}
+$('btnNewGroup').onclick=newGroup;
+
+function drawThumb(canvas, key){
+  const c=canvas.getContext('2d'), img=getImage(key);
+  const paint=()=>{ const im=state.imgCache.get(key); if(!im)return;
+    const s=Math.min(canvas.width/im.naturalWidth, canvas.height/im.naturalHeight);
+    const w=im.naturalWidth*s, h=im.naturalHeight*s;
+    c.clearRect(0,0,canvas.width,canvas.height); c.drawImage(im,(canvas.width-w)/2,(canvas.height-h)/2,w,h); };
+  if(img) paint();
+  else { const info=state.files.get(key); if(info){ const p=new Image(); p.onload=()=>{ state.imgCache.set(key,p); paint(); }; p.src=URL.createObjectURL(info.file); } }
+}
+function deleteObject(id){
+  pushUndo();
+  state.map.objects=state.map.objects.filter(o=>o.id!==id);
+  if(state.selObj===id) deselect();
+  renderObjList(); markDirty(); renderMinimap();
+}
+function centerOnObject(id){
+  const o=obj(id); if(!o) return;
+  cam.x=(o.x+o.w/2)-(cv.clientWidth/cam.zoom)/2; cam.y=(o.y+o.h/2)-(cv.clientHeight/cam.zoom)/2;
+  markDirty(); renderMinimap();
+}
+
+/* ============================================================ MODES */
+function setModeHint(){ $('modeHint').textContent = state.mode==='paint' ? t('hint_paint') : t('hint_place'); }
+function setMode(m){
+  state.mode=m; stage.dataset.mode=m;
+  $('btnModePaint').dataset.active = m==='paint'?'1':'0';
+  $('btnModePlace').dataset.active = m==='place'?'1':'0';
+  if(m==='paint') deselect();
+  setModeHint(); renderTree($('search').value); updateStatus();
+}
+$('btnModePaint').onclick=()=>setMode('paint');
+$('btnModePlace').onclick=()=>setMode('place');
+
+/* ============================================================ UNDO / CLIPBOARD */
+function snapshot(){ return JSON.stringify({terrain:state.map.terrain,objects:state.map.objects,groups:state.map.groups,nextId:state.map.nextId,nextGroupId:state.map.nextGroupId,gridW:state.map.gridW,gridH:state.map.gridH}); }
+function restore(s){ const d=JSON.parse(s);
+  state.map.terrain=d.terrain; state.map.objects=d.objects; state.map.groups=d.groups||[]; state.map.nextId=d.nextId; state.map.nextGroupId=d.nextGroupId||1; state.map.gridW=d.gridW; state.map.gridH=d.gridH;
+  if(!obj(state.selObj)) deselect();
+  renderObjList(); markDirty(); renderMinimap(); }
+function pushUndo(){ state.undo.push(snapshot()); if(state.undo.length>80) state.undo.shift(); state.redo.length=0; }
+$('btnUndo').onclick=()=>{ if(!state.undo.length)return; state.redo.push(snapshot()); restore(state.undo.pop()); };
+$('btnRedo').onclick=()=>{ if(!state.redo.length)return; state.undo.push(snapshot()); restore(state.redo.pop()); };
+$('btnCopy').onclick=()=>{ const o=obj(state.selObj); if(o){ state.clipboard={...o}; toast(t('t_copied')); } };
+$('btnCut').onclick =()=>{ const o=obj(state.selObj); if(o){ state.clipboard={...o}; deleteObject(o.id); toast(t('t_cut')); } };
+$('btnPaste').onclick=()=>{ if(!state.clipboard)return; pushUndo();
+  const o={...state.clipboard,id:state.map.nextId++,x:state.clipboard.x+24,y:state.clipboard.y+24};
+  state.map.objects.push(o); selectObject(o.id); renderObjList(); markDirty(); renderMinimap(); };
+
+/* ============================================================ NEW / SAVE / OPEN */
+$('btnNew').onclick=()=>{
+  const v=prompt(t('p_new'), `${state.map.gridW} x ${state.map.gridH}`); if(!v) return;
+  const mt=v.match(/(\d+)\s*[x×]\s*(\d+)/i); if(!mt){ toast(t('t_badSize'), true); return; }
+  const gw=Math.max(1,Math.min(512,+mt[1])), gh=Math.max(1,Math.min(512,+mt[2]));
+  state.map=newMap(gw,gh); state.undo.length=0; state.redo.length=0; deselect();
+  cam.x=-200; cam.y=-120; cam.zoom=0.5; renderObjList(); markDirty(); renderMinimap(); toast(t('t_newMap',{w:gw,h:gh}));
+};
+$('btnSave').onclick=()=>{
+  const data={ format:'lionheart-map', version:2, tileSize:TILE, gridW:state.map.gridW, gridH:state.map.gridH,
+    terrain:state.map.terrain,
+    objects:state.map.objects.map(o=>({path:o.path,x:o.x,y:o.y,w:o.w,h:o.h,visible:o.visible!==false,groupId:o.groupId??null})),
+    groups:state.map.groups.map(g=>({id:g.id,name:g.name,collapsed:!!g.collapsed,visible:g.visible!==false})),
+    nextGroupId:state.map.nextGroupId };
+  const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='mapa.json'; a.click(); URL.revokeObjectURL(a.href);
+  toast(t('t_saved'));
+};
+$('btnOpen').onclick=()=>$('mapInput').click();
+$('mapInput').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader(); rd.onload=()=>{ try{ loadMap(JSON.parse(rd.result)); }catch(err){ toast(t('t_badJson'), true); } };
+  rd.readAsText(f); e.target.value='';
+});
+function loadMap(d){
+  if(d.format!=='lionheart-map'){ toast(t('t_notMap'), true); return; }
+  const gw=d.gridW, gh=d.gridH, m=newMap(gw,gh); m.tileSize=d.tileSize||TILE;
+  let missing=0;
+  const resolve=p=>{ if(p==null)return null; if(state.files.has(p))return p;
+    const target=norm(p); for(const k of state.files.keys()) if(norm(k)===target) return k; missing++; return p; };
+  for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){ m.terrain[r][c]=resolve((d.terrain[r]||[])[c]??null); }
+  let id=1; for(const o of (d.objects||[])){ m.objects.push({id:id++,path:resolve(o.path),x:o.x,y:o.y,w:o.w||128,h:o.h||128,visible:o.visible!==false,groupId:o.groupId??null}); }
+  m.groups=(d.groups||[]).map(g=>({id:g.id,name:g.name||'Carpeta',collapsed:!!g.collapsed,visible:g.visible!==false}));
+  m.nextGroupId=d.nextGroupId||(m.groups.reduce((mx,g)=>Math.max(mx,g.id),0)+1);
+  m.nextId=id; state.map=m; state.undo.length=0; state.redo.length=0; deselect();
+  $('empty').style.display='none'; renderObjList(); markDirty(); renderMinimap();
+  toast(missing? t('t_mapLoadedMiss',{n:missing}) : t('t_mapLoaded'), missing>0);
+}
+
+/* ============================================================ IMPORT .zax (original Lionheart maps) */
+const zaxTexKey   = p => 'Cache\\Textures\\' + p.replace(/\//g,'\\') + '.png';
+const zaxModelKey = p => 'Cache\\Models\\'   + p.replace(/\//g,'\\') + '.png';
+function resolveKey(key){
+  if(state.files.has(key)) return key;
+  const target=norm(key);
+  for(const k of state.files.keys()) if(norm(k)===target) return k;
+  return key;                                   // keep path even if Cache not loaded
+}
+$('btnZax').onclick=()=>{
+  if(!state.files.size){ toast(t('z_nocache'), true); }
+  $('zaxInput').click();
+};
+$('zaxInput').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader(); rd.onload=()=>importZax(rd.result); rd.readAsText(f); e.target.value='';
+});
+
+function importZax(text){
+  const lines=text.split(/\r?\n/);
+  let W=0,H=0; const palette={}; const models=[]; const elev=[];
+  let curPath=null,curX=null,curY=null;
+  const flush=()=>{ if(curPath!=null && curX!=null && curY!=null) models.push({path:curPath,x:curX,y:curY}); curPath=null;curX=null;curY=null; };
+  for(const raw of lines){
+    const s=raw.trim(); let m;
+    if(!W && (m=s.match(/^Width=(\d+)/))) W=+m[1];
+    else if(!H && (m=s.match(/^Height=(\d+)/))) H=+m[1];
+    else if((m=s.match(/^Model=(.+)$/))){ flush(); curPath=m[1]; }
+    else if((m=s.match(/^Position X=(-?\d+)/))){ curX=+m[1]; }
+    else if((m=s.match(/^Position Y=(-?\d+)/))){ curY=+m[1]; flush(); }
+    else if((m=s.match(/^Texture (\d+)=(.+)$/))){ palette[+m[1]]=m[2]; }
+    else if((m=s.match(/^Elevations Row (\d+)=(.*)$/))){ elev[+m[1]]=m[2]; }
+  }
+  flush();
+  if(!W||!H){ toast(t('z_bad'), true); return; }
+  toast(t('z_loading'));
+
+  // only environment props make up the visual map (skip Editor markers, Characters, FX)
+  const envs=models.filter(o=>/^Environments\//i.test(o.path));
+
+  // texture palette -> resolved Cache keys
+  const palKeys={}; const nTex=Object.keys(palette).length;
+  for(const i in palette) palKeys[i]=resolveKey(zaxTexKey(palette[i]));
+
+  // elevation heightmap (vertices) -> bytes
+  const evGrid=elev.filter(r=>r!=null).map(r=>{ const a=[]; for(let j=0;j+1<r.length;j+=2) a.push(parseInt(r.substr(j,2),16)||0); return a; });
+  const vR=evGrid.length, vC=evGrid[0]?evGrid[0].length:0;
+  const sampleElev=(px,py)=>{ if(!vR||!vC) return 0;
+    let vc=Math.max(0,Math.min(vC-1,Math.round(px/64))), vr=Math.max(0,Math.min(vR-1,Math.round(py/64)));
+    return evGrid[vr][vc]; };
+
+  // build a new map sized to fit the original
+  const gw=Math.ceil(W/TILE), gh=Math.ceil(H/TILE);
+  const map=newMap(gw,gh);
+
+  // terrain fill (approx): elevation 0 => void texture (idx0), ground => height band over textures 1..n
+  for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){
+    const e=sampleElev(c*TILE+TILE/2, r*TILE+TILE/2);
+    let ti;
+    if(e<=0 || nTex<=1) ti=0;
+    else ti = 1 + Math.floor((e-1)/255*(nTex-1));
+    ti=Math.max(0, Math.min(nTex-1, ti));
+    map.terrain[r][c] = palKeys[ti] ?? null;
+  }
+
+  // place models in file order (= render/layer order); anchor = sprite center
+  let id=1;
+  for(const md of envs){
+    const key=resolveKey(zaxModelKey(md.path));
+    map.objects.push({ id:id++, path:key, ax:md.x, ay:md.y, w:128, h:128, x:md.x-64, y:md.y-64 });
+  }
+  map.nextId=id;
+
+  state.map=map; state.undo.length=0; state.redo.length=0; deselect();
+  state.paintTexture = palKeys[1] ?? palKeys[0] ?? null;
+  $('empty').style.display='none';
+  fitView();
+  renderObjList(); markDirty(); renderMinimap();
+
+  if(!state.files.size) toast(t('z_models_only',{n:envs.length}), true);
+  else { toast(t('z_loaded',{n:envs.length, t:nTex})); loadZaxSizes(); }
+}
+
+// load each model image to get its true size, then re-center on its anchor
+async function loadZaxSizes(){
+  const keys=[...new Set(state.map.objects.filter(o=>o.ax!=null).map(o=>o.path))];
+  for(const key of keys){
+    await ensureLoaded([key]);
+    const img=state.imgCache.get(key); if(!img) continue;
+    const w=img.naturalWidth, h=img.naturalHeight;
+    for(const o of state.map.objects){
+      if(o.path===key && o.ax!=null){ o.w=w; o.h=h; o.x=Math.round(o.ax-w/2); o.y=Math.round(o.ay-h/2); }
+    }
+    markDirty();
+  }
+  renderObjList(); renderMinimap();
+}
+
+// frame the whole map in view
+function fitView(){
+  const m=state.map, mapW=m.gridW*TILE, mapH=m.gridH*TILE;
+  const W=cv.clientWidth||800, H=cv.clientHeight||600;
+  cam.zoom=Math.max(0.05, Math.min(4, Math.min(W/mapW, H/mapH)*0.95));
+  cam.x = -(W/cam.zoom - mapW)/2;
+  cam.y = -(H/cam.zoom - mapH)/2;
+}
+
+/* ============================================================ EXPORT PNG (no grid, no seams) */
+$('btnExport').onclick=async ()=>{
+  const m=state.map, W=m.gridW*TILE, H=m.gridH*TILE;
+  if(Math.max(W,H)>16384 || W*H>1.2e8){ if(!confirm(t('c_bigExport',{w:W,h:H}))) return; }
+  toast(t('t_prepExport'));
+  const keys=new Set();
+  for(const row of m.terrain) for(const k of row) if(k) keys.add(k);
+  for(const o of m.objects) keys.add(o.path);
+  await ensureLoaded([...keys]);
+  const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
+  // terrain: smoothing OFF + 1px overlap => no grid/seams
+  x.imageSmoothingEnabled=false;
+  for(let r=0;r<m.gridH;r++) for(let col=0;col<m.gridW;col++){
+    const k=m.terrain[r][col]; if(!k) continue;
+    const img=state.imgCache.get(k); if(img) x.drawImage(img, col*TILE, r*TILE, TILE+1, TILE+1);
+  }
+  // objects: smoothing ON
+  x.imageSmoothingEnabled=true;
+  for(const o of m.objects){ if(!effVisible(o)) continue; const img=state.imgCache.get(o.path); if(img) x.drawImage(img,o.x,o.y,o.w,o.h); }
+  c.toBlob(b=>{ if(!b){ toast(t('t_exportFail'), true); return; }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='mapa.png'; a.click(); URL.revokeObjectURL(a.href);
+    toast(t('t_exported',{w:W,h:H})); }, 'image/png');
+};
+
+/* ============================================================ ABOUT modal */
+$('btnAbout').onclick=()=> $('modal').classList.add('show');
+$('modalClose').onclick=()=> $('modal').classList.remove('show');
+$('modal').addEventListener('click', e=>{ if(e.target===$('modal')) $('modal').classList.remove('show'); });
+document.querySelectorAll('.mtab').forEach(tb=>tb.onclick=()=>{
+  document.querySelectorAll('.mtab').forEach(x=>x.dataset.active='0'); tb.dataset.active='1';
+  const tab=tb.dataset.tab; document.querySelectorAll('[data-pane]').forEach(p=>p.classList.toggle('hidden', p.dataset.pane!==tab));
+});
+$('dlDecoder').onclick=()=>{ const src=$('decoderSrc').textContent;
+  const blob=new Blob([src],{type:'text/x-python'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='lionheart_frm16_decoder.py'; a.click(); URL.revokeObjectURL(a.href); };
+
+/* ============================================================ KEYBOARD */
+window.addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT') return;
+  if(e.code==='Space'){ spaceDown=true; if(!dragMode) stage.dataset.mode='pan'; e.preventDefault(); return; }
+  const ctrl=e.ctrlKey||e.metaKey;
+  if(ctrl&&e.key.toLowerCase()==='z'){ e.preventDefault(); $('btnUndo').click(); return; }
+  if(ctrl&&e.key.toLowerCase()==='y'){ e.preventDefault(); $('btnRedo').click(); return; }
+  if(ctrl&&e.key.toLowerCase()==='c'){ e.preventDefault(); $('btnCopy').click(); return; }
+  if(ctrl&&e.key.toLowerCase()==='x'){ e.preventDefault(); $('btnCut').click(); return; }
+  if(ctrl&&e.key.toLowerCase()==='v'){ e.preventDefault(); $('btnPaste').click(); return; }
+  if(ctrl&&e.key.toLowerCase()==='s'){ e.preventDefault(); $('btnSave').click(); return; }
+  const o=obj(state.selObj);
+  if(o){
+    const step=e.shiftKey?1:8; let mv=false;
+    if(e.key==='ArrowUp'){ o.y-=step; mv=true; } else if(e.key==='ArrowDown'){ o.y+=step; mv=true; }
+    else if(e.key==='ArrowLeft'){ o.x-=step; mv=true; } else if(e.key==='ArrowRight'){ o.x+=step; mv=true; }
+    else if(e.key==='Delete'||e.key==='Backspace'){ deleteObject(o.id); e.preventDefault(); return; }
+    if(mv){ e.preventDefault(); markDirty(); renderMinimap(); updateStatus(); }
+  }
+});
+window.addEventListener('keyup', e=>{ if(e.code==='Space'){ spaceDown=false; if(!dragMode) stage.dataset.mode=state.mode; } });
+
+/* ============================================================ STATUS + helpers */
+function updateStatus(wx,wy){
+  const m=state.map, parts=[];
+  parts.push(`<b>${m.gridW}×${m.gridH}</b> ${t('u_tiles')}`);
+  parts.push(`${t('u_zoom')} <b>${(cam.zoom*100|0)}%</b>`);
+  if(wx!=null){ const c=Math.floor(wx/TILE), r=Math.floor(wy/TILE); parts.push(`${t('u_cell')} <b>${c},${r}</b>`); }
+  const o=obj(state.selObj);
+  if(o){ const info=state.files.get(o.path); parts.push(`${t('u_sel')} <b>${info?info.name:'?'}</b> @ ${o.x},${o.y}`); }
+  $('status').innerHTML=parts.join('   ·   ');
+}
+function esc(s){ return s.replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+let toastT;
+function toast(msg, warn){ const el=$('toast'); el.textContent=msg; el.className='show'+(warn?' warn':''); clearTimeout(toastT); toastT=setTimeout(()=>el.className='',2600); }
+
+/* init */
+$('decoderView').textContent = $('decoderSrc').textContent;
+applyLang();
+resizeCanvas(); renderObjList(); updateStatus(); renderMinimap();
+</script>
+</body>
+</html>
