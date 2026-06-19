@@ -38,8 +38,9 @@ input{font-family:inherit}
 #btnLang .fl:hover{opacity:.7}
 
 /* Body */
-#body{display:grid;grid-template-columns:300px 1fr;min-height:0}
-#sidebar{background:var(--panel);border-right:1px solid var(--line);display:grid;grid-template-rows:auto auto minmax(120px,1fr) auto auto;min-height:0}
+#body{display:grid;grid-template-columns:280px 1fr 290px;min-height:0}
+#sidebar{background:var(--panel);border-right:1px solid var(--line);display:grid;grid-template-rows:auto auto minmax(120px,1fr) auto;min-height:0}
+#rightbar{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .panel-h{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:7px 10px 5px;display:flex;align-items:center;gap:7px}
 .panel-h::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--line)}
 .h-mini::before{background:var(--yellow)}
@@ -75,21 +76,34 @@ input{font-family:inherit}
 #preview img{max-width:100%;max-height:100%;object-fit:contain}
 #previewName{font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-#objectsWrap{display:flex;flex-direction:column;min-height:0;max-height:210px}
 #objHead{display:flex;align-items:center;gap:7px}
-#objList{overflow:auto;padding:0 8px 8px;min-height:0}
-.objrow{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:4px;cursor:grab;color:#c4cbd5;font-size:12px}
+#objList{flex:1;overflow:auto;padding:4px 8px 8px;min-height:0}
+.mini-btn{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:2px 7px;font-size:12px;color:var(--ink);margin-left:8px}
+.mini-btn:hover{background:#2c333c}
+.eye{flex:none;width:18px;text-align:center;cursor:pointer;opacity:.85;font-size:12px;user-select:none}
+.eye.off{opacity:.28}
+.objrow{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:grab;color:#c4cbd5;font-size:12px}
 .objrow:hover{background:var(--panel2)}
 .objrow[data-sel="1"]{background:#2f3a2f;color:#fff;box-shadow:0 0 0 1px var(--green) inset}
 .objrow.dragging{opacity:.4}
 .objrow.dz-above{box-shadow:inset 0 3px 0 -1px var(--green)}
 .objrow.dz-below{box-shadow:inset 0 -3px 0 -1px var(--green)}
-.objrow canvas{width:26px;height:26px;background:#0e1115;border-radius:3px;flex:none;object-fit:contain;pointer-events:none}
-.objrow .grip{color:var(--muted);font-size:12px;cursor:grab;flex:none}
+.objrow.hid .on,.objrow.hid canvas{opacity:.4}
+.objrow canvas{width:24px;height:24px;background:#0e1115;border-radius:3px;flex:none;object-fit:contain;pointer-events:none}
 .objrow .on{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.objrow .del{background:none;border:none;color:var(--muted);font-size:14px;padding:2px 5px;border-radius:3px}
+.objrow .del{background:none;border:none;color:var(--muted);font-size:13px;padding:2px 4px;border-radius:3px}
 .objrow .del:hover{background:#3a2424;color:var(--red)}
-.objrow .zlbl{color:var(--muted);font-size:10px;min-width:22px;text-align:right}
+.objrow .zlbl{color:var(--muted);font-size:10px;min-width:20px;text-align:right}
+.grp{margin-bottom:1px}
+.grp-head{display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:4px;cursor:grab;color:#dfe4ea;font-size:12px;background:#20252c}
+.grp-head:hover{background:#262d36}
+.grp-head .arr{width:11px;color:var(--muted);font-size:10px;transition:transform .12s;cursor:pointer;flex:none}
+.grp-head.col .arr{transform:rotate(-90deg)}
+.grp-head .gname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp-head .gname[contenteditable="true"]{outline:1px solid var(--blue);border-radius:3px;padding:0 3px;overflow:visible}
+.grp-head.dz-into{box-shadow:0 0 0 2px var(--gold) inset}
+.grp-head.hid .gname{opacity:.45}
+.grp-body{margin-left:9px;border-left:1px solid var(--line);padding-left:3px}
 
 /* Stage */
 #stage{position:relative;background:#0c0e11;overflow:hidden;border-left:2px solid #1f6f78}
@@ -155,6 +169,7 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
     <div class="tb-group">
       <button class="tb-btn" id="btnNew" data-i18n="b_new">🗺️ Nuevo</button>
       <button class="tb-btn" id="btnOpen" data-i18n="b_open">📂 Abrir</button>
+      <button class="tb-btn" id="btnZax" data-i18n="b_zax" data-i18n-title="z_btn_title" title="">📜 Importar .zax</button>
       <button class="tb-btn" id="btnSave" data-i18n="b_save">💾 Guardar</button>
       <button class="tb-btn" id="btnExport" data-i18n="b_export">🖼️ Exportar PNG</button>
     </div>
@@ -206,11 +221,6 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
           <div id="previewName"></div>
         </div>
       </div>
-
-      <div id="objectsWrap">
-        <div class="panel-h h-obj" id="objHead"><span data-i18n="h_objects">Objetos en el mapa</span><span id="objCount" style="margin-left:auto;color:var(--muted)"></span></div>
-        <div id="objList"></div>
-      </div>
     </div>
 
     <!-- ===== STAGE ===== -->
@@ -223,6 +233,16 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
         <button class="big" id="btnFolder2" data-i18n="empty_btn">📁 Cargar carpeta Cache…</button>
         <p style="font-size:11px" data-i18n="empty_note">Requiere Chrome o Edge. La carpeta se lee solo en tu equipo; nada se sube a ningún sitio.</p>
       </div>
+    </div>
+
+    <!-- ===== RIGHT: LAYERS ===== -->
+    <div id="rightbar">
+      <div class="panel-h h-obj" id="objHead">
+        <span data-i18n="h_layers">Capas</span>
+        <span id="objCount" style="margin-left:auto;color:var(--muted)"></span>
+        <button class="mini-btn" id="btnNewGroup" data-i18n-title="t_newfolder" title="">📁＋</button>
+      </div>
+      <div id="objList"></div>
     </div>
   </div>
 </div>
@@ -238,15 +258,8 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
     <div class="modal-body">
 
       <section data-pane="cred">
-        <h2>🦁 Myth Drannor · Toolchain</h2>
+        <h2 data-i18n="cred_title">Editor de Mapas · Infinity Engine</h2>
         <p data-i18n-html="cred_intro"></p>
-
-        <h3 data-i18n="cred_h_project">Proyecto</h3>
-        <div class="cred-card">
-          <div class="role" data-i18n="cred_author_role"></div>
-          <div class="who">AlleyV</div>
-          <div class="desc" data-i18n-html="cred_author_desc"></div>
-        </div>
 
         <h3 data-i18n="cred_h_art">Arte y assets originales</h3>
         <div class="cred-card">
@@ -309,6 +322,7 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
 <div id="toast"></div>
 <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
 <input type="file" id="mapInput" accept=".json" class="hidden">
+<input type="file" id="zaxInput" accept=".zax,.txt" class="hidden">
 
 <!-- embedded decoder source -->
 <script type="text/plain" id="decoderSrc">#!/usr/bin/env python3
@@ -319,7 +333,7 @@ Lionheart: Legacy of the Crusader - FRM16 Decoder  [SOLVED]
 Decodes Lionheart FRM16 images (sprites/renders with transparency),
 both standalone files and those embedded inside MDL16 model files.
 
-Project: "Myth Drannor" mod for Baldur's Gate 2 EE.
+Reverse-engineered, undocumented Lionheart image format.
 
 =====================================================================
 FRM16 FORMAT - FULL SPECIFICATION
@@ -539,12 +553,16 @@ const $ = id => document.getElementById(id);
 const T = {
   es:{
     b_new:"🗺️ Nuevo", b_open:"📂 Abrir", b_save:"💾 Guardar", b_export:"🖼️ Exportar PNG",
+    b_zax:"📜 Importar .zax", z_btn_title:"Cargar un mapa original de Lionheart (.zax)",
+    z_loaded:"Mapa .zax cargado · {n} modelos · {t} texturas", z_models_only:"{n} modelos colocados (carga la carpeta Cache para ver las imágenes)",
+    z_bad:"No parece un .zax válido (falta Width/Height)", z_nocache:"Primero carga la carpeta Cache para resolver los modelos y texturas", z_loading:"Cargando mapa .zax…",
     b_terrain:"🖌️ Terreno", b_objects:"🧩 Objetos", b_folder:"📁 Cargar carpeta Cache…", b_credits:"ℹ️ Créditos",
     t_undo:"Deshacer (Ctrl+Z)", t_redo:"Rehacer (Ctrl+Y)", t_cut:"Cortar (Ctrl+X)", t_copy:"Copiar (Ctrl+C)", t_paste:"Pegar (Ctrl+V)",
     hint_paint:"Modo: Terreno — clic para pintar la textura seleccionada",
     hint_place:"Modo: Objetos — arrastra un .png al mapa; mueve y reordena con el ratón",
     h_minimap:"Minimapa", h_files:"Archivos · arrastra al mapa", ph_search:"Buscar archivo…  (escribe para filtrar)",
     h_preview:"Previsualización", prev_empty:"Selecciona un archivo", h_objects:"Objetos en el mapa",
+    h_layers:"Capas", t_newfolder:"Nueva carpeta", grp_name:"Carpeta",
     empty_h:"Editor de mapas para Infinity Engine",
     empty_p:"Carga la carpeta <code>Cache</code> de tu proyecto (la que contiene <code>Models</code> y <code>Textures</code> con los <code>.png</code> ya generados). Las rutas se conservan tal cual para que los mapas sean compatibles.",
     empty_btn:"📁 Cargar carpeta Cache…",
@@ -562,9 +580,8 @@ const T = {
     t_exportFail:"No se pudo exportar (mapa demasiado grande)", t_exported:"Mapa exportado · {w}×{h} px",
     t_copied:"Objeto copiado", t_cut:"Objeto cortado",
     tab_cred:"Créditos", tab_fmt:"Formato FRM16 · Decoder",
-    cred_intro:"Un editor de mapas y un conjunto de herramientas nacidos de la ingeniería inversa, desde cero, del formato de imagen propietario <b>FRM16</b> de <i>Lionheart: Legacy of the Crusader</i> — para reutilizar sus assets en Baldur's Gate II.",
-    cred_h_project:"Proyecto", cred_author_role:"Autor · dirección · pruebas · conocimiento del juego",
-    cred_author_desc:"Creador del mod <b>Myth Drannor</b>. Toda esta empresa —la idea, la dirección, las pruebas incansables archivo a archivo y el conocimiento profundo de los formatos del juego— es suya. Sin esa visión, nada de esto existiría.",
+    cred_title:"Editor de Mapas · Infinity Engine",
+    cred_intro:"Un editor de mapas para el motor Infinity Engine, basado en la ingeniería inversa —desde cero— del formato de imagen propietario <b>FRM16</b> de <i>Lionheart: Legacy of the Crusader</i>.",
     cred_h_art:"Arte y assets originales", cred_studio_role:"Estudio",
     cred_studio_desc:"Creadores de <i>Lionheart: Legacy of the Crusader</i> (2003) y de todo el arte original aquí reutilizado. Con respeto y gratitud por su legado.",
     cred_h_comm:"Comunidad de modding", cred_comm_role:"Comunidad",
@@ -586,12 +603,16 @@ const T = {
   },
   en:{
     b_new:"🗺️ New", b_open:"📂 Open", b_save:"💾 Save", b_export:"🖼️ Export PNG",
+    b_zax:"📜 Import .zax", z_btn_title:"Load an original Lionheart map (.zax)",
+    z_loaded:"Loaded .zax · {n} models · {t} textures", z_models_only:"{n} models placed (load the Cache folder to see the images)",
+    z_bad:"Not a valid .zax (missing Width/Height)", z_nocache:"Load the Cache folder first to resolve models and textures", z_loading:"Loading .zax map…",
     b_terrain:"🖌️ Terrain", b_objects:"🧩 Objects", b_folder:"📁 Load Cache folder…", b_credits:"ℹ️ Credits",
     t_undo:"Undo (Ctrl+Z)", t_redo:"Redo (Ctrl+Y)", t_cut:"Cut (Ctrl+X)", t_copy:"Copy (Ctrl+C)", t_paste:"Paste (Ctrl+V)",
     hint_paint:"Mode: Terrain — click to paint the selected texture",
     hint_place:"Mode: Objects — drag a .png onto the map; move and reorder with the mouse",
     h_minimap:"Minimap", h_files:"Files · drag onto the map", ph_search:"Search file…  (type to filter)",
     h_preview:"Preview", prev_empty:"Select a file", h_objects:"Objects on the map",
+    h_layers:"Layers", t_newfolder:"New folder", grp_name:"Folder",
     empty_h:"Map editor for the Infinity Engine",
     empty_p:"Load your project's <code>Cache</code> folder (the one with <code>Models</code> and <code>Textures</code> and the generated <code>.png</code> files). Paths are kept exactly as-is so maps stay compatible.",
     empty_btn:"📁 Load Cache folder…",
@@ -609,9 +630,8 @@ const T = {
     t_exportFail:"Export failed (map too large)", t_exported:"Map exported · {w}×{h} px",
     t_copied:"Object copied", t_cut:"Object cut",
     tab_cred:"Credits", tab_fmt:"FRM16 format · Decoder",
-    cred_intro:"A map editor and a small toolchain born from reverse-engineering, from scratch, the proprietary <b>FRM16</b> image format of <i>Lionheart: Legacy of the Crusader</i> — to reuse its assets in Baldur's Gate II.",
-    cred_h_project:"Project", cred_author_role:"Author · direction · testing · game knowledge",
-    cred_author_desc:"Creator of the <b>Myth Drannor</b> mod. This whole undertaking —the idea, the direction, the tireless file-by-file testing and the deep knowledge of the game's formats— is theirs. Without that vision, none of this would exist.",
+    cred_title:"Map Editor · Infinity Engine",
+    cred_intro:"A map editor for the Infinity Engine, based on reverse-engineering —from scratch— the proprietary <b>FRM16</b> image format of <i>Lionheart: Legacy of the Crusader</i>.",
     cred_h_art:"Original art & assets", cred_studio_role:"Studio",
     cred_studio_desc:"Creators of <i>Lionheart: Legacy of the Crusader</i> (2003) and of all the original art reused here. With respect and gratitude for their legacy.",
     cred_h_comm:"Modding community", cred_comm_role:"Community",
@@ -670,7 +690,7 @@ const state = {
 function newMap(gw,gh){
   return { tileSize:TILE, gridW:gw, gridH:gh,
     terrain:Array.from({length:gh},()=>Array(gw).fill(null)),
-    objects:[], nextId:1 };
+    objects:[], groups:[], nextId:1, nextGroupId:1 };
 }
 const toBack = p => p.replace(/\//g,'\\');
 const norm   = p => p.replace(/\\/g,'/').toLowerCase();
@@ -842,6 +862,7 @@ function draw(){
   // objects — smoothing ON
   ctx.imageSmoothingEnabled=true;
   for(const o of m.objects){
+    if(!effVisible(o)) continue;
     const img=getImage(o.path);
     const x=w2sX(o.x), y=w2sY(o.y), ww=o.w*cam.zoom, hh=o.h*cam.zoom;
     if(img) ctx.drawImage(img,x,y,ww,hh);
@@ -870,7 +891,7 @@ function renderMinimap(){
     if(img) mmx.drawImage(img,x,y,s,s); else { mmx.fillStyle='#2a2f37'; mmx.fillRect(x,y,s,s); }
   }
   mmx.fillStyle='#7fd08c';
-  for(const o of m.objects) mmx.fillRect(ox+(o.x+o.w/2)*sc-1, oy+(o.y+o.h/2)*sc-1, 2,2);
+  for(const o of m.objects){ if(!effVisible(o)) continue; mmx.fillRect(ox+(o.x+o.w/2)*sc-1, oy+(o.y+o.h/2)*sc-1, 2,2); }
   const vx=ox+cam.x*sc, vy=oy+cam.y*sc, vw=(cv.clientWidth/cam.zoom)*sc, vh=(cv.clientHeight/cam.zoom)*sc;
   mmx.strokeStyle='#e3c64b'; mmx.lineWidth=1.5; mmx.strokeRect(vx,vy,vw,vh);
 }
@@ -922,7 +943,7 @@ function paintAt(wx,wy){
 }
 function hitObject(wx,wy){
   const o=state.map.objects;
-  for(let i=o.length-1;i>=0;i--){ const b=o[i]; if(wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h) return b; }
+  for(let i=o.length-1;i>=0;i--){ const b=o[i]; if(effVisible(b) && wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h) return b; }
   return null;
 }
 
@@ -943,14 +964,20 @@ cv.addEventListener('drop', e=>{
 function placeObject(key, wx, wy){
   const info=state.files.get(key); if(!info) return; pushUndo();
   const img=getImage(key);
-  const finish=(iw,ih)=>{ const o={id:state.map.nextId++,path:key,x:Math.round(wx-iw/2),y:Math.round(wy-ih/2),w:iw,h:ih};
+  const finish=(iw,ih)=>{ const o={id:state.map.nextId++,path:key,x:Math.round(wx-iw/2),y:Math.round(wy-ih/2),w:iw,h:ih,visible:true,groupId:null};
     state.map.objects.push(o); selectObject(o.id); renderObjList(); markDirty(); renderMinimap(); };
   if(img) finish(img.naturalWidth,img.naturalHeight);
   else { const p=new Image(); p.onload=()=>finish(p.naturalWidth,p.naturalHeight); p.onerror=()=>finish(128,128); p.src=URL.createObjectURL(info.file); }
 }
 
-/* ============================================================ OBJECTS panel */
+/* ============================================================ LAYERS panel (objects + groups) */
 const obj = id => state.map.objects.find(o=>o.id===id);
+const group = gid => state.map.groups.find(g=>g.id===gid);
+function effVisible(o){
+  if(o.visible===false) return false;
+  if(o.groupId!=null){ const g=group(o.groupId); if(g && g.visible===false) return false; }
+  return true;
+}
 function selectObject(id){
   state.selObj=id; markDirty();
   document.querySelectorAll('.objrow[data-sel="1"]').forEach(n=>n.dataset.sel='0');
@@ -960,47 +987,128 @@ function selectObject(id){
 function deselect(){ state.selObj=null; markDirty(); document.querySelectorAll('.objrow[data-sel="1"]').forEach(n=>n.dataset.sel='0'); }
 
 let reorderId=null;
-function clearMarks(){ document.querySelectorAll('.objrow.dz-above,.objrow.dz-below').forEach(n=>n.classList.remove('dz-above','dz-below')); }
+function clearMarks(){ document.querySelectorAll('.dz-above,.dz-below,.dz-into').forEach(n=>n.classList.remove('dz-above','dz-below','dz-into')); }
+
+/* ---- render the layer tree (top z first) ---- */
 function renderObjList(){
   const host=$('objList'); host.innerHTML='';
   const objs=state.map.objects;
   $('objCount').textContent = objs.length ? `${objs.length}` : '';
+  const shown=new Set();
   for(let i=objs.length-1;i>=0;i--){
-    const o=objs[i], info=state.files.get(o.path);
-    const row=document.createElement('div'); row.className='objrow'; row.dataset.id=o.id; row.draggable=true;
-    if(o.id===state.selObj) row.dataset.sel='1';
-    const grip=document.createElement('span'); grip.className='grip'; grip.textContent='⠿';
-    const thumb=document.createElement('canvas'); thumb.width=26; thumb.height=26; drawThumb(thumb,o.path);
-    const name=document.createElement('div'); name.className='on'; name.textContent=info?info.name:o.path.split('\\').pop();
-    const zl=document.createElement('span'); zl.className='zlbl'; zl.textContent='z'+i;
-    const del=document.createElement('button'); del.className='del'; del.textContent='🗑';
-    del.onclick=ev=>{ ev.stopPropagation(); deleteObject(o.id); };
-    row.append(grip,thumb,name,zl,del);
-    row.onclick=()=> selectObject(o.id);
-    row.ondblclick=()=> centerOnObject(o.id);
-    // drag to reorder (z-order)
-    row.ondragstart=ev=>{ reorderId=o.id; ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain',''); row.classList.add('dragging'); };
-    row.ondragend=()=>{ reorderId=null; row.classList.remove('dragging'); clearMarks(); };
-    row.ondragover=ev=>{ if(reorderId==null||reorderId===o.id)return; ev.preventDefault(); ev.dataTransfer.dropEffect='move';
-      const r=row.getBoundingClientRect(); const after=(ev.clientY-r.top)>r.height/2; clearMarks(); row.classList.add(after?'dz-below':'dz-above'); };
-    row.ondrop=ev=>{ if(reorderId==null)return; ev.preventDefault();
-      const r=row.getBoundingClientRect(); const after=(ev.clientY-r.top)>r.height/2; clearMarks(); reorderObjects(reorderId,o.id,after); };
-    host.appendChild(row);
+    const o=objs[i];
+    if(o.groupId!=null && group(o.groupId)){
+      const g=group(o.groupId);
+      if(shown.has(g.id)) continue;
+      shown.add(g.id);
+      host.appendChild(makeGroupRow(g, objs));
+    } else {
+      host.appendChild(makeObjRow(o));
+    }
   }
+  // empty groups (no members yet) shown at the top so you can drag images into them
+  for(const g of state.map.groups){ if(!shown.has(g.id)){ host.insertBefore(makeGroupRow(g,objs), host.firstChild); shown.add(g.id); } }
 }
-function reorderObjects(dragId, targetId, after){
-  if(dragId==null||dragId===targetId) return;
+function makeObjRow(o){
+  const info=state.files.get(o.path);
+  const row=document.createElement('div'); row.className='objrow'; row.dataset.id=o.id; row.draggable=true;
+  if(o.id===state.selObj) row.dataset.sel='1';
+  if(!effVisible(o)) row.classList.add('hid');
+  const eye=document.createElement('span'); eye.className='eye'+(o.visible===false?' off':''); eye.textContent='👁';
+  eye.title='Mostrar / ocultar'; eye.onclick=ev=>{ ev.stopPropagation(); toggleObjVis(o.id); };
+  const thumb=document.createElement('canvas'); thumb.width=24; thumb.height=24; drawThumb(thumb,o.path);
+  const name=document.createElement('div'); name.className='on'; name.textContent=info?info.name:o.path.split('\\').pop();
+  const del=document.createElement('button'); del.className='del'; del.textContent='🗑';
+  del.onclick=ev=>{ ev.stopPropagation(); deleteObject(o.id); };
+  row.append(eye,thumb,name,del);
+  row.onclick=()=>selectObject(o.id);
+  row.ondblclick=()=>centerOnObject(o.id);
+  row.ondragstart=ev=>{ reorderId=o.id; ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain',''); row.classList.add('dragging'); ev.stopPropagation(); };
+  row.ondragend=()=>{ reorderId=null; row.classList.remove('dragging'); clearMarks(); };
+  row.ondragover=ev=>{ if(reorderId==null||reorderId===o.id)return; ev.preventDefault(); ev.dataTransfer.dropEffect='move';
+    const r=row.getBoundingClientRect(); const after=(ev.clientY-r.top)>r.height/2; clearMarks(); row.classList.add(after?'dz-below':'dz-above'); };
+  row.ondrop=ev=>{ if(reorderId==null)return; ev.preventDefault(); ev.stopPropagation();
+    const r=row.getBoundingClientRect(); const after=(ev.clientY-r.top)>r.height/2; clearMarks(); dropOnObject(reorderId,o.id,after); };
+  return row;
+}
+function makeGroupRow(g, objs){
+  const wrap=document.createElement('div'); wrap.className='grp';
+  const head=document.createElement('div'); head.className='grp-head'+(g.collapsed?' col':'')+(g.visible===false?' hid':''); head.dataset.gid=g.id;
+  const arr=document.createElement('span'); arr.className='arr'; arr.textContent='▾';
+  arr.onclick=ev=>{ ev.stopPropagation(); toggleCollapse(g.id); };
+  const eye=document.createElement('span'); eye.className='eye'+(g.visible===false?' off':''); eye.textContent='👁';
+  eye.title='Mostrar / ocultar carpeta'; eye.onclick=ev=>{ ev.stopPropagation(); toggleGroupVis(g.id); };
+  const ico=document.createElement('span'); ico.textContent='📁'; ico.style.flex='none';
+  const name=document.createElement('span'); name.className='gname'; name.textContent=g.name;
+  name.title='Doble clic para renombrar'; name.ondblclick=ev=>{ ev.stopPropagation(); editGroupName(name,g); };
+  const del=document.createElement('button'); del.className='del'; del.textContent='🗑'; del.title='Quitar carpeta (conserva las imágenes)';
+  del.onclick=ev=>{ ev.stopPropagation(); deleteGroup(g.id); };
+  head.append(arr,eye,ico,name,del);
+  // drop target: drop an image here to put it in this folder
+  head.ondragover=ev=>{ if(reorderId==null)return; ev.preventDefault(); ev.dataTransfer.dropEffect='move'; clearMarks(); head.classList.add('dz-into'); };
+  head.ondragleave=()=>head.classList.remove('dz-into');
+  head.ondrop=ev=>{ if(reorderId==null)return; ev.preventDefault(); ev.stopPropagation(); head.classList.remove('dz-into'); setObjGroup(reorderId, g.id); };
+  wrap.appendChild(head);
+  if(!g.collapsed){
+    const body=document.createElement('div'); body.className='grp-body';
+    for(let i=objs.length-1;i>=0;i--) if(objs[i].groupId===g.id) body.appendChild(makeObjRow(objs[i]));
+    wrap.appendChild(body);
+  }
+  return wrap;
+}
+
+/* ---- layer / group operations ---- */
+function newGroup(){
   pushUndo();
-  const arr=state.map.objects;
-  let vis=arr.slice().reverse();              // visual top->bottom
-  const from=vis.findIndex(o=>o.id===dragId);
-  const dragged=vis.splice(from,1)[0];
-  let ti=vis.findIndex(o=>o.id===targetId);
-  if(after) ti+=1;
-  vis.splice(ti,0,dragged);
-  state.map.objects=vis.reverse();
+  const gid=state.map.nextGroupId++;
+  state.map.groups.push({id:gid, name:t('grp_name')+' '+gid, collapsed:false, visible:true});
+  renderObjList();
+}
+function toggleObjVis(id){ const o=obj(id); if(!o)return; pushUndo(); o.visible=o.visible===false; renderObjList(); markDirty(); renderMinimap(); }
+function toggleGroupVis(gid){ const g=group(gid); if(!g)return; pushUndo(); g.visible=g.visible===false; renderObjList(); markDirty(); renderMinimap(); }
+function toggleCollapse(gid){ const g=group(gid); if(!g)return; g.collapsed=!g.collapsed; renderObjList(); }
+function deleteGroup(gid){
+  pushUndo();
+  for(const o of state.map.objects) if(o.groupId===gid) o.groupId=null;   // keep the images, just drop the folder
+  state.map.groups=state.map.groups.filter(g=>g.id!==gid);
+  renderObjList(); markDirty();
+}
+function setObjGroup(objId, gid){
+  const arr=state.map.objects, o=arr.find(x=>x.id===objId); if(!o)return;
+  pushUndo();
+  o.groupId=gid;
+  if(gid!=null){
+    const members=arr.filter(x=>x!==o && x.groupId===gid);
+    arr.splice(arr.indexOf(o),1);
+    if(members.length) arr.splice(arr.indexOf(members[members.length-1])+1,0,o);
+    else arr.push(o);
+  }
   renderObjList(); markDirty(); renderMinimap();
 }
+function editGroupName(span, g){
+  span.contentEditable='true'; span.focus();
+  const range=document.createRange(); range.selectNodeContents(span);
+  const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+  const done=()=>{ span.contentEditable='false'; g.name=(span.textContent.trim()||g.name); span.textContent=g.name; span.onblur=null; };
+  span.onblur=done;
+  span.onkeydown=ev=>{ ev.stopPropagation(); if(ev.key==='Enter'){ ev.preventDefault(); span.blur(); } else if(ev.key==='Escape'){ span.textContent=g.name; span.blur(); } };
+}
+
+/* reorder in z (and inherit drop target's folder) */
+function dropOnObject(dragId, targetId, after){
+  if(dragId===targetId) return;
+  const arr=state.map.objects;
+  const dragged=arr.find(o=>o.id===dragId), target=arr.find(o=>o.id===targetId);
+  if(!dragged||!target) return;
+  pushUndo();
+  dragged.groupId = target.groupId;
+  arr.splice(arr.indexOf(dragged),1);
+  const ti=arr.indexOf(target);
+  arr.splice(after?ti:ti+1, 0, dragged);     // "after"=below target visually=lower z
+  renderObjList(); markDirty(); renderMinimap();
+}
+$('btnNewGroup').onclick=newGroup;
+
 function drawThumb(canvas, key){
   const c=canvas.getContext('2d'), img=getImage(key);
   const paint=()=>{ const im=state.imgCache.get(key); if(!im)return;
@@ -1035,9 +1143,9 @@ $('btnModePaint').onclick=()=>setMode('paint');
 $('btnModePlace').onclick=()=>setMode('place');
 
 /* ============================================================ UNDO / CLIPBOARD */
-function snapshot(){ return JSON.stringify({terrain:state.map.terrain,objects:state.map.objects,nextId:state.map.nextId,gridW:state.map.gridW,gridH:state.map.gridH}); }
+function snapshot(){ return JSON.stringify({terrain:state.map.terrain,objects:state.map.objects,groups:state.map.groups,nextId:state.map.nextId,nextGroupId:state.map.nextGroupId,gridW:state.map.gridW,gridH:state.map.gridH}); }
 function restore(s){ const d=JSON.parse(s);
-  state.map.terrain=d.terrain; state.map.objects=d.objects; state.map.nextId=d.nextId; state.map.gridW=d.gridW; state.map.gridH=d.gridH;
+  state.map.terrain=d.terrain; state.map.objects=d.objects; state.map.groups=d.groups||[]; state.map.nextId=d.nextId; state.map.nextGroupId=d.nextGroupId||1; state.map.gridW=d.gridW; state.map.gridH=d.gridH;
   if(!obj(state.selObj)) deselect();
   renderObjList(); markDirty(); renderMinimap(); }
 function pushUndo(){ state.undo.push(snapshot()); if(state.undo.length>80) state.undo.shift(); state.redo.length=0; }
@@ -1058,8 +1166,11 @@ $('btnNew').onclick=()=>{
   cam.x=-200; cam.y=-120; cam.zoom=0.5; renderObjList(); markDirty(); renderMinimap(); toast(t('t_newMap',{w:gw,h:gh}));
 };
 $('btnSave').onclick=()=>{
-  const data={ format:'lionheart-map', version:1, tileSize:TILE, gridW:state.map.gridW, gridH:state.map.gridH,
-    terrain:state.map.terrain, objects:state.map.objects.map(o=>({path:o.path,x:o.x,y:o.y,w:o.w,h:o.h})) };
+  const data={ format:'lionheart-map', version:2, tileSize:TILE, gridW:state.map.gridW, gridH:state.map.gridH,
+    terrain:state.map.terrain,
+    objects:state.map.objects.map(o=>({path:o.path,x:o.x,y:o.y,w:o.w,h:o.h,visible:o.visible!==false,groupId:o.groupId??null})),
+    groups:state.map.groups.map(g=>({id:g.id,name:g.name,collapsed:!!g.collapsed,visible:g.visible!==false})),
+    nextGroupId:state.map.nextGroupId };
   const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='mapa.json'; a.click(); URL.revokeObjectURL(a.href);
   toast(t('t_saved'));
@@ -1077,10 +1188,119 @@ function loadMap(d){
   const resolve=p=>{ if(p==null)return null; if(state.files.has(p))return p;
     const target=norm(p); for(const k of state.files.keys()) if(norm(k)===target) return k; missing++; return p; };
   for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){ m.terrain[r][c]=resolve((d.terrain[r]||[])[c]??null); }
-  let id=1; for(const o of (d.objects||[])){ m.objects.push({id:id++,path:resolve(o.path),x:o.x,y:o.y,w:o.w||128,h:o.h||128}); }
+  let id=1; for(const o of (d.objects||[])){ m.objects.push({id:id++,path:resolve(o.path),x:o.x,y:o.y,w:o.w||128,h:o.h||128,visible:o.visible!==false,groupId:o.groupId??null}); }
+  m.groups=(d.groups||[]).map(g=>({id:g.id,name:g.name||'Carpeta',collapsed:!!g.collapsed,visible:g.visible!==false}));
+  m.nextGroupId=d.nextGroupId||(m.groups.reduce((mx,g)=>Math.max(mx,g.id),0)+1);
   m.nextId=id; state.map=m; state.undo.length=0; state.redo.length=0; deselect();
   $('empty').style.display='none'; renderObjList(); markDirty(); renderMinimap();
   toast(missing? t('t_mapLoadedMiss',{n:missing}) : t('t_mapLoaded'), missing>0);
+}
+
+/* ============================================================ IMPORT .zax (original Lionheart maps) */
+const zaxTexKey   = p => 'Cache\\Textures\\' + p.replace(/\//g,'\\') + '.png';
+const zaxModelKey = p => 'Cache\\Models\\'   + p.replace(/\//g,'\\') + '.png';
+function resolveKey(key){
+  if(state.files.has(key)) return key;
+  const target=norm(key);
+  for(const k of state.files.keys()) if(norm(k)===target) return k;
+  return key;                                   // keep path even if Cache not loaded
+}
+$('btnZax').onclick=()=>{
+  if(!state.files.size){ toast(t('z_nocache'), true); }
+  $('zaxInput').click();
+};
+$('zaxInput').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader(); rd.onload=()=>importZax(rd.result); rd.readAsText(f); e.target.value='';
+});
+
+function importZax(text){
+  const lines=text.split(/\r?\n/);
+  let W=0,H=0; const palette={}; const models=[]; const elev=[];
+  let curPath=null,curX=null,curY=null;
+  const flush=()=>{ if(curPath!=null && curX!=null && curY!=null) models.push({path:curPath,x:curX,y:curY}); curPath=null;curX=null;curY=null; };
+  for(const raw of lines){
+    const s=raw.trim(); let m;
+    if(!W && (m=s.match(/^Width=(\d+)/))) W=+m[1];
+    else if(!H && (m=s.match(/^Height=(\d+)/))) H=+m[1];
+    else if((m=s.match(/^Model=(.+)$/))){ flush(); curPath=m[1]; }
+    else if((m=s.match(/^Position X=(-?\d+)/))){ curX=+m[1]; }
+    else if((m=s.match(/^Position Y=(-?\d+)/))){ curY=+m[1]; flush(); }
+    else if((m=s.match(/^Texture (\d+)=(.+)$/))){ palette[+m[1]]=m[2]; }
+    else if((m=s.match(/^Elevations Row (\d+)=(.*)$/))){ elev[+m[1]]=m[2]; }
+  }
+  flush();
+  if(!W||!H){ toast(t('z_bad'), true); return; }
+  toast(t('z_loading'));
+
+  // only environment props make up the visual map (skip Editor markers, Characters, FX)
+  const envs=models.filter(o=>/^Environments\//i.test(o.path));
+
+  // texture palette -> resolved Cache keys
+  const palKeys={}; const nTex=Object.keys(palette).length;
+  for(const i in palette) palKeys[i]=resolveKey(zaxTexKey(palette[i]));
+
+  // elevation heightmap (vertices) -> bytes
+  const evGrid=elev.filter(r=>r!=null).map(r=>{ const a=[]; for(let j=0;j+1<r.length;j+=2) a.push(parseInt(r.substr(j,2),16)||0); return a; });
+  const vR=evGrid.length, vC=evGrid[0]?evGrid[0].length:0;
+  const sampleElev=(px,py)=>{ if(!vR||!vC) return 0;
+    let vc=Math.max(0,Math.min(vC-1,Math.round(px/64))), vr=Math.max(0,Math.min(vR-1,Math.round(py/64)));
+    return evGrid[vr][vc]; };
+
+  // build a new map sized to fit the original
+  const gw=Math.ceil(W/TILE), gh=Math.ceil(H/TILE);
+  const map=newMap(gw,gh);
+
+  // terrain fill (approx): elevation 0 => void texture (idx0), ground => height band over textures 1..n
+  for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){
+    const e=sampleElev(c*TILE+TILE/2, r*TILE+TILE/2);
+    let ti;
+    if(e<=0 || nTex<=1) ti=0;
+    else ti = 1 + Math.floor((e-1)/255*(nTex-1));
+    ti=Math.max(0, Math.min(nTex-1, ti));
+    map.terrain[r][c] = palKeys[ti] ?? null;
+  }
+
+  // place models in file order (= render/layer order); anchor = sprite center
+  let id=1;
+  for(const md of envs){
+    const key=resolveKey(zaxModelKey(md.path));
+    map.objects.push({ id:id++, path:key, ax:md.x, ay:md.y, w:128, h:128, x:md.x-64, y:md.y-64 });
+  }
+  map.nextId=id;
+
+  state.map=map; state.undo.length=0; state.redo.length=0; deselect();
+  state.paintTexture = palKeys[1] ?? palKeys[0] ?? null;
+  $('empty').style.display='none';
+  fitView();
+  renderObjList(); markDirty(); renderMinimap();
+
+  if(!state.files.size) toast(t('z_models_only',{n:envs.length}), true);
+  else { toast(t('z_loaded',{n:envs.length, t:nTex})); loadZaxSizes(); }
+}
+
+// load each model image to get its true size, then re-center on its anchor
+async function loadZaxSizes(){
+  const keys=[...new Set(state.map.objects.filter(o=>o.ax!=null).map(o=>o.path))];
+  for(const key of keys){
+    await ensureLoaded([key]);
+    const img=state.imgCache.get(key); if(!img) continue;
+    const w=img.naturalWidth, h=img.naturalHeight;
+    for(const o of state.map.objects){
+      if(o.path===key && o.ax!=null){ o.w=w; o.h=h; o.x=Math.round(o.ax-w/2); o.y=Math.round(o.ay-h/2); }
+    }
+    markDirty();
+  }
+  renderObjList(); renderMinimap();
+}
+
+// frame the whole map in view
+function fitView(){
+  const m=state.map, mapW=m.gridW*TILE, mapH=m.gridH*TILE;
+  const W=cv.clientWidth||800, H=cv.clientHeight||600;
+  cam.zoom=Math.max(0.05, Math.min(4, Math.min(W/mapW, H/mapH)*0.95));
+  cam.x = -(W/cam.zoom - mapW)/2;
+  cam.y = -(H/cam.zoom - mapH)/2;
 }
 
 /* ============================================================ EXPORT PNG (no grid, no seams) */
@@ -1101,7 +1321,7 @@ $('btnExport').onclick=async ()=>{
   }
   // objects: smoothing ON
   x.imageSmoothingEnabled=true;
-  for(const o of m.objects){ const img=state.imgCache.get(o.path); if(img) x.drawImage(img,o.x,o.y,o.w,o.h); }
+  for(const o of m.objects){ if(!effVisible(o)) continue; const img=state.imgCache.get(o.path); if(img) x.drawImage(img,o.x,o.y,o.w,o.h); }
   c.toBlob(b=>{ if(!b){ toast(t('t_exportFail'), true); return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='mapa.png'; a.click(); URL.revokeObjectURL(a.href);
     toast(t('t_exported',{w:W,h:H})); }, 'image/png');
