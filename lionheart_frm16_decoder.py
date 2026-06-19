@@ -6,7 +6,7 @@ Lionheart: Legacy of the Crusader - FRM16 Decoder  [SOLVED]
 Decodes Lionheart FRM16 images (sprites/renders with transparency),
 both standalone files and those embedded inside MDL16 model files.
 
-Project: "Myth Drannor" mod for Baldur's Gate 2 EE.
+Reverse-engineered, undocumented Lionheart image format.
 
 =====================================================================
 FRM16 FORMAT - FULL SPECIFICATION
