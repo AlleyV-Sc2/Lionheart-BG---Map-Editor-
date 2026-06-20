@@ -41,7 +41,7 @@
 <body>
 <div class="container">
   <h1>🦁 Lionheart · MDL16 Tool</h1>
-  <p class="sub">Extrae <b>todas las capas</b> a FRM16 y convierte a <b>PNG</b> (capas unidas) — con arreglo de "mitades intercambiadas" y centrado automático.</p>
+  <p class="sub">Extrae <b>todas las capas</b> a FRM16 y convierte a <b>PNG</b> (una imagen por capa) — con arreglo de "mitades intercambiadas" y centrado automático.</p>
 
   <div class="panel">
     <div class="drop-zone" id="dropZone">
@@ -53,7 +53,7 @@
     <div class="opts">
       <label class="opt"><input type="checkbox" id="optFix" checked> Arreglar mitades intercambiadas (efecto estatua)</label>
       <label class="opt"><input type="checkbox" id="optCenter" checked> Centrar en lienzo grande</label>
-      <label class="opt"><input type="checkbox" id="optMerge" checked> Unir todas las capas</label>
+      <label class="opt"><input type="checkbox" id="optAll" checked> Incluir capas sin cabecera <span class="dim">(contorno/sombra · experimental)</span></label>
       <label class="opt">Margen: <input type="range" id="optMargin" min="0" max="120" value="60" style="width:90px"> <span id="marginVal">60</span>px</label>
     </div>
 
@@ -204,37 +204,69 @@ function cropCenter(buf, margin){
   return {data:out, w:CW, h:CH};
 }
 
-// MDL16/FRM16 -> buffer RGBA final (capas unidas, arreglado y centrado)
-function decodeToImage(d, opts){
-  const offs=findFrameOffsets(d);
-  if(offs.length===0) return null;
-  const useOffs = opts.merge ? offs : [offs[0]];
-  let acc=null;
-  for(let k=0;k<useOffs.length;k++){
-    const off=useOffs[k];
-    const h=parseHeader(d, off);
-    if(!h.sw || !h.sh || h.sw>4096 || h.sh>4096) continue;
-    // Fin del RLE: JUSTO antes del marcador final "04 00 00 00 .. .. 00".
-    // Si se decodifica más allá, ese marcador (y la tabla de offsets) generan
-    // la línea negra/coloreada bajo la imagen. El marcador está en dataStart+dsize-5.
-    const isMarker = (i)=> i>h.dataStart && i+6<d.length && d[i]===0x04 && d[i+1]===0 && d[i+2]===0 && d[i+3]===0 && d[i+6]===0;
-    let dataEnd = h.dataStart + h.dsize - 5;
-    if(!isMarker(dataEnd)){
-      let found=-1;
-      for(let i=Math.max(h.dataStart, dataEnd-48); i<Math.min(d.length-6, dataEnd+48); i++){ if(isMarker(i)){ found=i; break; } }
-      if(found<0) for(let i=h.dataStart; i<d.length-6; i++){ if(isMarker(i)){ found=i; break; } }
-      let bound=d.length; for(const o of offs){ if(o>off){ bound=o; break; } }
-      dataEnd = found>0 ? found : bound;
-    }
-    const rows=decodeRLE(d, h.dataStart, dataEnd, h.sw, h.sh+8);
-    if(rows.length===0) continue;
-    const shift = opts.fix ? gapShift(rows, h.sw) : 0;
-    const buf=rowsToRGBA(rows, h.sw, shift);
-    acc = acc ? overlayCentered(acc, buf) : buf;
+// Decodifica UNA capa (frame en 'off') a buffer RGBA, sin centrar.
+// Para JUSTO en el marcador final "04 00 00 00 XX 00 00" (= dataStart+dsize-5),
+// así no se cuela la metadata ni la tabla de offsets (la línea negra del fondo).
+function decodeFrameRGBA(d, off, allOffs, fix){
+  const h=parseHeader(d, off);
+  if(!h.sw || !h.sh || h.sw>4096 || h.sh>4096) return null;
+  let nextOff=d.length; for(const o of allOffs){ if(o>off){ nextOff=o; break; } }
+  const isMarker = (i)=> i>h.dataStart && i+6<d.length && d[i]===0x04 && d[i+1]===0 && d[i+2]===0 && d[i+3]===0 && d[i+6]===0;
+  let dataEnd = h.dataStart + h.dsize - 5;
+  if(!isMarker(dataEnd)){
+    let found=-1;
+    for(let i=Math.max(h.dataStart, dataEnd-48); i<Math.min(d.length-6, dataEnd+48); i++){ if(isMarker(i)){ found=i; break; } }
+    if(found<0) for(let i=h.dataStart; i<d.length-6; i++){ if(isMarker(i)){ found=i; break; } }
+    dataEnd = found>0 ? found : nextOff;
   }
-  if(!acc) return null;
-  if(opts.center) acc=cropCenter(acc, opts.margin);
-  return acc;
+  dataEnd = Math.min(dataEnd, nextOff, d.length);
+  const rows=decodeRLE(d, h.dataStart, dataEnd, h.sw, h.sh+8);
+  if(rows.length===0) return null;
+  const shift = fix ? gapShift(rows, h.sw) : 0;
+  return rowsToRGBA(rows, h.sw, shift);
+}
+// UNA capa lista (arreglada + centrada según opciones)
+function decodeLayer(d, off, allOffs, opts){
+  let buf=decodeFrameRGBA(d, off, allOffs, opts.fix);
+  if(!buf) return null;
+  return opts.center ? cropCenter(buf, opts.margin) : buf;
+}
+// Detecta TODOS los bloques RLE del archivo: los que tienen cabecera 01 32 10
+// y los que van sin cabecera (contorno/sombra) intercalados, precedidos de una
+// tabla de offsets u32. Devuelve [{start,end,width,hdr}] en orden.
+function findAllBlocks(d){
+  const hdrs=findFrameOffsets(d);
+  const baseW = hdrs.length ? (d[hdrs[0]+7]|(d[hdrs[0]+8]<<8)) : 128;
+  const isMk=(i)=> i+6<d.length && d[i]===0x04 && d[i+1]===0 && d[i+2]===0 && d[i+3]===0 && d[i+5]===0 && d[i+6]===0;
+  // marcadores reales (excluir clusters densos de tabla: marcadores muy juntos)
+  const allMk=[]; for(let i=0;i<d.length-6;i++) if(isMk(i)) allMk.push(i);
+  const realMk=allMk.filter(m=>allMk.filter(x=>x!==m && Math.abs(x-m)<=16).length<2);
+  // longitud de tabla de offsets (u32 crecientes) tras un marcador
+  const tableLen=(start)=>{ let prev=-1,n=0,i=start; while(i+4<=d.length){ const v=d[i]|(d[i+1]<<8)|(d[i+2]<<16)|(d[i+3]<<24); if(n===0){ if(v>200000) break; } else if(!(v>prev && v-prev<200000)) break; prev=v;n++;i+=4; if(n>2000)break; } return n*4; };
+  const blocks=[];
+  // bloque inicial (primer frame con cabecera)
+  if(hdrs.length){ const h=parseHeader(d,hdrs[0]); let end=h.dataStart+h.dsize-5; if(!isMk(end)){ const m=realMk.find(x=>x>h.dataStart); end=m||d.length; } blocks.push({start:h.dataStart,end,width:h.sw,hdr:true}); }
+  // recorrer marcadores
+  for(let k=0;k<realMk.length;k++){
+    const mk=realMk[k]; const after=mk+7;
+    const nextMk = realMk[k+1]!==undefined ? realMk[k+1] : d.length;
+    // ¿cabecera 01 32 10 justo después? -> nuevo frame con cabecera
+    const nh = hdrs.find(h=>h>mk && h<nextMk);
+    if(nh!==undefined && nh-mk<800){ const h=parseHeader(d,nh); let end=h.dataStart+h.dsize-5; if(!isMk(end)){ const m=realMk.find(x=>x>h.dataStart); end=m||nextMk; } blocks.push({start:h.dataStart,end:Math.min(end,nextMk),width:h.sw,hdr:true}); }
+    else { // bloque sin cabecera: saltar tabla, RLE hasta el siguiente marcador
+      const tl=tableLen(after); const start=after+tl;
+      if(nextMk-start>20) blocks.push({start,end:nextMk,width:baseW,hdr:false});
+    }
+  }
+  // quitar duplicados por 'start'
+  const seen=new Set(); return blocks.filter(b=>{ if(seen.has(b.start))return false; seen.add(b.start); return true; });
+}
+function decodeBlock(d, blk, opts){
+  const rows=decodeRLE(d, blk.start, blk.end, blk.width, 600);
+  if(rows.length===0) return null;
+  const shift = opts.fix ? gapShift(rows, blk.width) : 0;
+  let buf=rowsToRGBA(rows, blk.width, shift);
+  return opts.center ? cropCenter(buf, opts.margin) : buf;
 }
 
 function bufToCanvas(buf){
@@ -243,7 +275,7 @@ function bufToCanvas(buf){
 }
 const canvasToBlob = cv => new Promise(res=>cv.toBlob(res,'image/png'));
 
-function currentOpts(){ return { fix:$('optFix').checked, center:$('optCenter').checked, merge:$('optMerge').checked, margin:parseInt($('optMargin').value,10) }; }
+function currentOpts(){ return { fix:$('optFix').checked, center:$('optCenter').checked, all:$('optAll').checked, margin:parseInt($('optMargin').value,10) }; }
 
 // ---------- BOTÓN: Extraer capas a FRM16 ----------
 btnFrm.onclick = async () => {
@@ -270,19 +302,29 @@ btnFrm.onclick = async () => {
   btnFrm.disabled=btnPng.disabled=false;
 };
 
-// ---------- BOTÓN: Convertir a PNG ----------
+// ---------- BOTÓN: Convertir a PNG (una imagen por capa) ----------
 btnPng.onclick = async () => {
   btnFrm.disabled=btnPng.disabled=true; logEl.innerHTML=''; preview.style.display='none';
-  const opts=currentOpts(); const zip=new JSZip(); let ok=0, errs=0, first=true;
+  const opts=currentOpts(); const zip=new JSZip(); let ok=0, errs=0, shown=false;
   for(let i=0;i<files.length;i++){
     const f=files[i];
     try{
-      const buf=decodeToImage(f.data, opts);
-      if(!buf){ log(`⚠️ ${f.name}: no decodificable`,'warn'); errs++; continue; }
-      const cv=bufToCanvas(buf); const blob=await canvasToBlob(cv);
-      zip.file(f.path.replace(/\.(mdl16|frm16)$/i,'.png'), blob);
-      ok++;
-      if(first){ pvCanvas.width=cv.width; pvCanvas.height=cv.height; pvCanvas.getContext('2d').drawImage(cv,0,0); preview.style.display='block'; first=false; log(`🖼️ ${f.name} → ${cv.width}×${cv.height}`,'dim'); }
+      // lista de bloques: todos (con y sin cabecera) o solo los que tienen cabecera
+      let blocks;
+      if(opts.all){ blocks=findAllBlocks(f.data); }
+      else { blocks=findFrameOffsets(f.data).map(o=>{ const h=parseHeader(f.data,o); let end=h.dataStart+h.dsize-5; return {start:h.dataStart,end,width:h.sw,hdr:true}; }); }
+      if(!blocks.length){ log(`⚠️ ${f.name}: sin FRM16`,'warn'); errs++; continue; }
+      const base=f.path.replace(/\.(mdl16|frm16)$/i,'');
+      let made=0;
+      for(let idx=0; idx<blocks.length; idx++){
+        const buf=decodeBlock(f.data, blocks[idx], opts);
+        if(!buf || (buf.w<=2 && buf.h<=2)) continue;       // saltar vacías
+        const cv=bufToCanvas(buf);
+        zip.file(`${base}_L${idx}.png`, await canvasToBlob(cv));
+        made++; ok++;
+        if(!shown){ showPreview(cv); shown=true; }
+      }
+      if(made>0) log(`✅ ${f.name}: ${made} capa(s) → PNG`,'ok'); else { log(`⚠️ ${f.name}: sin capas con contenido`,'warn'); errs++; }
     }catch(err){ log(`❌ ${f.name}: ${err.message}`,'err'); errs++; }
     if(i%8===0){ statusEl.textContent=`Convirtiendo ${i+1}/${files.length}…`; await new Promise(r=>setTimeout(r,0)); }
   }
@@ -290,6 +332,7 @@ btnPng.onclick = async () => {
   if(ok>0){ const blob=await zip.generateAsync({type:'blob'}); downloadBlob(blob,'Lionheart_PNG.zip'); }
   btnFrm.disabled=btnPng.disabled=false;
 };
+function showPreview(cv){ pvCanvas.width=cv.width; pvCanvas.height=cv.height; pvCanvas.getContext('2d').drawImage(cv,0,0); preview.style.display='block'; }
 
 function downloadBlob(blob, name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
 </script>
