@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Lionheart MDL16 · Extractor de capas + Conversor a PNG</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{ --bg:#0f0f0f; --panel:#1a1a1a; --line:#333; --accent:#f39c12; --accent2:#2ecc71; --txt:#e0e0e0; }
+  *{box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--txt);padding:20px;margin:0}
+  .container{max-width:980px;margin:0 auto}
+  h1{color:var(--accent);text-align:center;margin:0 0 6px}
+  .sub{text-align:center;color:#999;margin:0 0 24px;font-size:.92em}
+  .panel{background:var(--panel);padding:22px;border-radius:12px;border:1px solid var(--line);margin-bottom:18px}
+  .drop-zone{border:3px dashed var(--accent);padding:42px;text-align:center;border-radius:12px;cursor:pointer;transition:.2s}
+  .drop-zone:hover{background:rgba(243,156,18,.06)}
+  .drop-zone p{margin:6px 0}
+  .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+  button{background:var(--accent);color:#000;border:none;padding:12px 22px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:1em}
+  button:hover{filter:brightness(1.08)}
+  button:disabled{background:#555;color:#888;cursor:not-allowed;filter:none}
+  button.green{background:var(--accent2)}
+  .opts{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:14px;font-size:.9em;color:#bbb}
+  label.opt{display:flex;align-items:center;gap:7px;cursor:pointer}
+  input[type=range]{vertical-align:middle}
+  #status{text-align:center;padding:10px;font-family:monospace;min-height:20px;color:var(--accent2)}
+  #log{background:#111;padding:14px;border-radius:6px;font-family:monospace;font-size:.82em;max-height:280px;overflow-y:auto;margin-top:14px;line-height:1.55;display:none}
+  .le{border-bottom:1px solid #222;padding:2px 0}
+  .ok{color:#2ecc71}.warn{color:#f39c12}.err{color:#e74c3c}.dim{color:#888}
+  #preview{display:none;margin-top:16px;text-align:center}
+  #preview canvas{background:
+     linear-gradient(45deg,#2a2a2a 25%,transparent 25%),
+     linear-gradient(-45deg,#2a2a2a 25%,transparent 25%),
+     linear-gradient(45deg,transparent 75%,#2a2a2a 75%),
+     linear-gradient(-45deg,transparent 75%,#2a2a2a 75%);
+     background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;
+     border:1px solid #333;border-radius:8px;max-width:100%}
+  .hint{font-size:.85em;color:#888;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🦁 Lionheart · MDL16 Tool</h1>
+  <p class="sub">Extrae <b>todas las capas</b> a FRM16 y convierte a <b>PNG</b> (capas unidas) — con arreglo de "mitades intercambiadas" y centrado automático.</p>
+
+  <div class="panel">
+    <div class="drop-zone" id="dropZone">
+      <p style="font-size:1.15em">📂 Selecciona la carpeta <strong>Environments</strong> (o cualquier carpeta con <code>.mdl16</code>)</p>
+      <p class="dim">Se procesan todos los <code>.mdl16</code> recursivamente. También admite <code>.frm16</code> sueltos.</p>
+      <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
+    </div>
+
+    <div class="opts">
+      <label class="opt"><input type="checkbox" id="optFix" checked> Arreglar mitades intercambiadas (efecto estatua)</label>
+      <label class="opt"><input type="checkbox" id="optCenter" checked> Centrar en lienzo grande</label>
+      <label class="opt"><input type="checkbox" id="optMerge" checked> Unir todas las capas</label>
+      <label class="opt">Margen: <input type="range" id="optMargin" min="0" max="120" value="60" style="width:90px"> <span id="marginVal">60</span>px</label>
+    </div>
+
+    <div id="status">Esperando carpeta…</div>
+
+    <div class="row">
+      <button id="btnFrm" disabled>📦 Extraer capas → FRM16 (ZIP)</button>
+      <button id="btnPng" disabled class="green">🖼️ Convertir → PNG (ZIP)</button>
+    </div>
+
+    <div id="preview"><div class="hint">Vista previa (primer archivo convertido):</div><br><canvas id="pvCanvas"></canvas></div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const dropZone=$('dropZone'), folderInput=$('folderInput'), statusEl=$('status'), logEl=$('log');
+const btnFrm=$('btnFrm'), btnPng=$('btnPng'), preview=$('preview'), pvCanvas=$('pvCanvas');
+$('optMargin').oninput=e=>$('marginVal').textContent=e.target.value;
+
+let files=[];           // {name, path, data:Uint8Array}
+dropZone.onclick=()=>folderInput.click();
+
+folderInput.onchange = async (e) => {
+  const all=Array.from(e.target.files).filter(f=>/\.(mdl16|frm16)$/i.test(f.name));
+  if(!all.length){ statusEl.textContent='❌ No se encontraron .mdl16 ni .frm16'; statusEl.style.color='#e74c3c'; btnFrm.disabled=btnPng.disabled=true; return; }
+  statusEl.textContent=`Leyendo ${all.length} archivos…`; statusEl.style.color='#f39c12';
+  files=[];
+  for(const f of all){
+    const buf=await f.arrayBuffer();
+    files.push({name:f.name, path:f.webkitRelativePath||f.name, data:new Uint8Array(buf)});
+  }
+  const mdl=files.filter(f=>/\.mdl16$/i.test(f.name)).length, frm=files.length-mdl;
+  statusEl.textContent=`✅ ${files.length} archivos (${mdl} .mdl16, ${frm} .frm16)`;
+  statusEl.style.color='#2ecc71';
+  btnFrm.disabled=btnPng.disabled=false;
+  logEl.style.display='block'; logEl.innerHTML='';
+};
+
+function log(msg,cls='ok'){ const d=document.createElement('div'); d.className='le '+cls; d.textContent=msg; logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
+
+// ---------- Parseo FRM16/MDL16 ----------
+// Devuelve los offsets de todas las firmas 01 32 10 (cada una = una capa con cabecera)
+function findFrameOffsets(d){
+  const offs=[];
+  for(let i=0;i<d.length-3;i++){
+    if(d[i]===0x01 && d[i+1]===0x32 && d[i+2]===0x10) offs.push(i);
+  }
+  if(offs.length===0){ // FRM16 suelto '32 10'
+    for(let i=0;i<d.length-2;i++){ if(d[i]===0x32 && d[i+1]===0x10){ offs.push(i); break; } }
+  }
+  return offs;
+}
+function parseHeader(d, off){
+  const is01 = d[off]===0x01;
+  const b = is01 ? off : off; // los campos cuelgan igual de 'off' en ambos
+  const visW=d[b+3]|(d[b+4]<<8), visH=d[b+5]|(d[b+6]<<8);
+  const sw=d[b+7]|(d[b+8]<<8), sh=d[b+9]|(d[b+10]<<8);
+  const flags=d[b+13]|(d[b+14]<<8);
+  const dsize=d[b+17]|(d[b+18]<<8)|(d[b+19]<<16)|(d[b+20]<<24);
+  const dataStart = off + 42; // 32 cabecera + 10 sub-cabecera
+  return {is01, visW,visH, sw,sh, flags, dsize, dataStart};
+}
+// Tamaño del frame para extracción a .frm16 (hasta la siguiente firma o fin)
+function frameByteLength(d, off, allOffs){
+  const h=parseHeader(d,off);
+  // siguiente firma
+  let next=d.length;
+  for(const o of allOffs){ if(o>off){ next=o; break; } }
+  // por dsize (cabecera + datos), acotado por la siguiente firma
+  const bySize = 42 + h.dsize + 8;
+  return Math.min(Math.max(bySize, 64), next - off, d.length - off);
+}
+
+// ---------- Decodificación RLE ----------
+// 3 casos: SKIP (transparente), LITERAL, RUN. Pixeles RGB565 LE. 0xFFFF = transparente.
+function decodeRLE(d, start, bound, width, maxRows){
+  const rows=[]; let row=new Array(width).fill(null); let x=0; let pos=start;
+  const flush=()=>{ rows.push(row); row=new Array(width).fill(null); x=0; };
+  while(pos<bound && pos<d.length && rows.length<maxRows){
+    const ctrl=d[pos++];
+    if(ctrl & 0x80){ let n=ctrl&0x7F; while(n-->0){ x++; if(x>=width){ flush(); if(rows.length>=maxRows) break; } } }
+    else if(ctrl & 0x40){ let n=ctrl&0x3F; while(n-->0){ if(pos+1>=d.length) break; row[x]=d[pos]|(d[pos+1]<<8); pos+=2; x++; if(x>=width){ flush(); if(rows.length>=maxRows) break; } } }
+    else { let n=ctrl&0x3F; if(pos+1<d.length){ const v=d[pos]|(d[pos+1]<<8); pos+=2; while(n-->0){ row[x]=v; x++; if(x>=width){ flush(); if(rows.length>=maxRows) break; } } } }
+  }
+  if(rows.length<maxRows && row.some(p=>p!==null)) rows.push(row);
+  return rows;
+}
+
+// ---------- Centrado / arreglo de mitades ----------
+// Encuentra el desplazamiento circular que lleva el mayor hueco vacío a la costura.
+// Funciona para ambos casos: sprite normal (no mueve) y mitades intercambiadas (las une).
+function gapShift(rows, width){
+  const col=new Array(width).fill(0);
+  for(const r of rows) for(let x=0;x<width;x++){ const v=r[x]; if(v!==null && v!==0xFFFF) col[x]++; }
+  const mx=Math.max(...col,1); const thr=mx*0.12;
+  const empty=col.map(c=>c<thr?1:0);
+  const ext=empty.concat(empty);
+  let bestLen=0,bestStart=0,i=0;
+  while(i<2*width){
+    if(ext[i]){ let j=i; while(j<2*width && ext[j]) j++; const L=j-i; if(L>bestLen && L<=width){bestLen=L;bestStart=i%width;} i=j; }
+    else i++;
+  }
+  if(bestLen===0) return 0;
+  const gapCenter=(bestStart+Math.floor(bestLen/2))%width;
+  return (width-gapCenter)%width;
+}
+
+// rows -> {data:Uint8ClampedArray RGBA, w, h}
+function rowsToRGBA(rows, width, shift){
+  const h=rows.length; const out=new Uint8ClampedArray(width*h*4);
+  for(let y=0;y<h;y++){ const r=rows[y]; for(let x=0;x<Math.min(width,r.length);x++){
+    const v=r[x]; if(v===null||v===0xFFFF) continue;
+    const R=((v>>11)&31)*255/31|0, G=((v>>5)&63)*255/63|0, B=(v&31)*255/31|0;
+    const nx=(x+shift)%width; const idx=(y*width+nx)*4;
+    out[idx]=R; out[idx+1]=G; out[idx+2]=B; out[idx+3]=255;
+  }}
+  return {data:out, w:width, h};
+}
+
+// Une dos buffers RGBA alineados por su centro (top encima de base)
+function overlayCentered(base, top){
+  const w=Math.max(base.w, top.w), h=Math.max(base.h, top.h);
+  const out=new Uint8ClampedArray(w*h*4);
+  const blit=(src,sw,sh)=>{ const ox=(w-sw>>1), oy=(h-sh>>1);
+    for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){ const s=(y*sw+x)*4; if(src[s+3]===0)continue; const dx=ox+x,dy=oy+y; if(dx<0||dy<0||dx>=w||dy>=h)continue; const dimg=(dy*w+dx)*4; out[dimg]=src[s];out[dimg+1]=src[s+1];out[dimg+2]=src[s+2];out[dimg+3]=255; } };
+  blit(base.data, base.w, base.h);
+  blit(top.data, top.w, top.h);
+  return {data:out, w, h};
+}
+
+// Recorta al contenido y centra por masa en lienzo grande con margen
+function cropCenter(buf, margin){
+  const {data,w,h}=buf;
+  let minx=w,miny=h,maxx=-1,maxy=-1, sx=0,sy=0,n=0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){ if(data[(y*w+x)*4+3]>0){ if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; sx+=x; sy+=y; n++; } }
+  if(n===0) return {data:new Uint8ClampedArray(4), w:1, h:1};
+  const cw=maxx-minx+1, ch=maxy-miny+1;
+  const comx=sx/n-minx, comy=sy/n-miny;            // COM relativo al recorte
+  const halfW=Math.ceil(Math.max(comx, cw-comx)+margin);
+  const halfH=Math.ceil(Math.max(comy, ch-comy)+margin);
+  const CW=halfW*2, CH=halfH*2;
+  const out=new Uint8ClampedArray(CW*CH*4);
+  const ox=Math.round(CW/2-comx), oy=Math.round(CH/2-comy);
+  for(let y=0;y<ch;y++)for(let x=0;x<cw;x++){ const s=((miny+y)*w+(minx+x))*4; if(data[s+3]===0)continue; const dx=ox+x,dy=oy+y; if(dx<0||dy<0||dx>=CW||dy>=CH)continue; const dt=(dy*CW+dx)*4; out[dt]=data[s];out[dt+1]=data[s+1];out[dt+2]=data[s+2];out[dt+3]=255; }
+  return {data:out, w:CW, h:CH};
+}
+
+// MDL16/FRM16 -> buffer RGBA final (capas unidas, arreglado y centrado)
+function decodeToImage(d, opts){
+  const offs=findFrameOffsets(d);
+  if(offs.length===0) return null;
+  const useOffs = opts.merge ? offs : [offs[0]];
+  let acc=null;
+  for(let k=0;k<useOffs.length;k++){
+    const off=useOffs[k];
+    const h=parseHeader(d, off);
+    if(!h.sw || !h.sh || h.sw>4096 || h.sh>4096) continue;
+    // Fin del RLE: JUSTO antes del marcador final "04 00 00 00 .. .. 00".
+    // Si se decodifica más allá, ese marcador (y la tabla de offsets) generan
+    // la línea negra/coloreada bajo la imagen. El marcador está en dataStart+dsize-5.
+    const isMarker = (i)=> i>h.dataStart && i+6<d.length && d[i]===0x04 && d[i+1]===0 && d[i+2]===0 && d[i+3]===0 && d[i+6]===0;
+    let dataEnd = h.dataStart + h.dsize - 5;
+    if(!isMarker(dataEnd)){
+      let found=-1;
+      for(let i=Math.max(h.dataStart, dataEnd-48); i<Math.min(d.length-6, dataEnd+48); i++){ if(isMarker(i)){ found=i; break; } }
+      if(found<0) for(let i=h.dataStart; i<d.length-6; i++){ if(isMarker(i)){ found=i; break; } }
+      let bound=d.length; for(const o of offs){ if(o>off){ bound=o; break; } }
+      dataEnd = found>0 ? found : bound;
+    }
+    const rows=decodeRLE(d, h.dataStart, dataEnd, h.sw, h.sh+8);
+    if(rows.length===0) continue;
+    const shift = opts.fix ? gapShift(rows, h.sw) : 0;
+    const buf=rowsToRGBA(rows, h.sw, shift);
+    acc = acc ? overlayCentered(acc, buf) : buf;
+  }
+  if(!acc) return null;
+  if(opts.center) acc=cropCenter(acc, opts.margin);
+  return acc;
+}
+
+function bufToCanvas(buf){
+  const cv=document.createElement('canvas'); cv.width=buf.w; cv.height=buf.h;
+  const ctx=cv.getContext('2d'); const id=new ImageData(buf.data, buf.w, buf.h); ctx.putImageData(id,0,0); return cv;
+}
+const canvasToBlob = cv => new Promise(res=>cv.toBlob(res,'image/png'));
+
+function currentOpts(){ return { fix:$('optFix').checked, center:$('optCenter').checked, merge:$('optMerge').checked, margin:parseInt($('optMargin').value,10) }; }
+
+// ---------- BOTÓN: Extraer capas a FRM16 ----------
+btnFrm.onclick = async () => {
+  btnFrm.disabled=btnPng.disabled=true; logEl.innerHTML=''; preview.style.display='none';
+  const zip=new JSZip(); let nLayers=0, nFiles=0, errs=0;
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    try{
+      const offs=findFrameOffsets(f.data);
+      if(offs.length===0){ log(`⚠️ ${f.name}: sin FRM16`,'warn'); errs++; continue; }
+      const base=f.path.replace(/\.(mdl16|frm16)$/i,'');
+      offs.forEach((off,idx)=>{
+        const len=frameByteLength(f.data, off, offs);
+        const slice=f.data.slice(off, off+len);
+        zip.file(`${base}_L${idx}.frm16`, slice);
+        nLayers++;
+      });
+      log(`✅ ${f.name}: ${offs.length} capa(s)`,'ok'); nFiles++;
+    }catch(err){ log(`❌ ${f.name}: ${err.message}`,'err'); errs++; }
+    if(i%15===0){ statusEl.textContent=`Extrayendo ${i+1}/${files.length}…`; await new Promise(r=>setTimeout(r,0)); }
+  }
+  statusEl.textContent=`✅ ${nLayers} capas de ${nFiles} archivos (${errs} avisos)`;
+  if(nLayers>0){ const blob=await zip.generateAsync({type:'blob'}); downloadBlob(blob,'Lionheart_FRM16_capas.zip'); }
+  btnFrm.disabled=btnPng.disabled=false;
+};
+
+// ---------- BOTÓN: Convertir a PNG ----------
+btnPng.onclick = async () => {
+  btnFrm.disabled=btnPng.disabled=true; logEl.innerHTML=''; preview.style.display='none';
+  const opts=currentOpts(); const zip=new JSZip(); let ok=0, errs=0, first=true;
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    try{
+      const buf=decodeToImage(f.data, opts);
+      if(!buf){ log(`⚠️ ${f.name}: no decodificable`,'warn'); errs++; continue; }
+      const cv=bufToCanvas(buf); const blob=await canvasToBlob(cv);
+      zip.file(f.path.replace(/\.(mdl16|frm16)$/i,'.png'), blob);
+      ok++;
+      if(first){ pvCanvas.width=cv.width; pvCanvas.height=cv.height; pvCanvas.getContext('2d').drawImage(cv,0,0); preview.style.display='block'; first=false; log(`🖼️ ${f.name} → ${cv.width}×${cv.height}`,'dim'); }
+    }catch(err){ log(`❌ ${f.name}: ${err.message}`,'err'); errs++; }
+    if(i%8===0){ statusEl.textContent=`Convirtiendo ${i+1}/${files.length}…`; await new Promise(r=>setTimeout(r,0)); }
+  }
+  statusEl.textContent=`✅ ${ok} PNG generados (${errs} avisos)`;
+  if(ok>0){ const blob=await zip.generateAsync({type:'blob'}); downloadBlob(blob,'Lionheart_PNG.zip'); }
+  btnFrm.disabled=btnPng.disabled=false;
+};
+
+function downloadBlob(blob, name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
+</script>
+</body>
+</html>
