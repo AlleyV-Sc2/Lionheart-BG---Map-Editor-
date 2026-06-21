@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lionheart · Editor de Mapas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
   --bg:#14171c; --panel:#1c2026; --panel2:#23282f; --line:#333b45;
@@ -184,34 +185,44 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
 
   <!-- ===== TOOLBAR ===== -->
   <div id="toolbar">
-    <div class="brand">🦁 Map Editor <small>Lionheart · Infinity</small></div>
+    <div class="brand">🦁 <small>Lionheart</small></div>
+    <!-- Cargar Cache (primer icono) -->
     <div class="tb-group">
-      <button class="tb-btn" id="btnNew" data-i18n="b_new">🗺️ Nuevo</button>
-      <button class="tb-btn" id="btnOpen" data-i18n="b_open">📂 Abrir</button>
-      <button class="tb-btn" id="btnZax" data-i18n="b_zax" data-i18n-title="z_btn_title" title="">📜 Importar .zax</button>
-      <button class="tb-btn" id="btnSave" data-i18n="b_save">💾 Guardar</button>
-      <button class="tb-btn" id="btnExport" data-i18n="b_export">🖼️ Exportar PNG</button>
+      <button class="tb-btn icon" id="btnFolder" data-i18n-title="b_folder" title="Cargar carpeta Cache">🗂️</button>
     </div>
+    <!-- Archivo -->
+    <div class="tb-group">
+      <button class="tb-btn icon" id="btnNew" data-i18n-title="b_new" title="Nuevo mapa">🗺️</button>
+      <button class="tb-btn icon" id="btnOpen" data-i18n-title="b_open" title="Abrir">📂</button>
+      <button class="tb-btn icon" id="btnZax" data-i18n-title="z_btn_title" title="Importar .zax">📜</button>
+      <button class="tb-btn icon" id="btnSave" data-i18n-title="b_save" title="Guardar">💾</button>
+      <button class="tb-btn icon" id="btnExport" data-i18n-title="b_export" title="Exportar PNG">🖼️</button>
+    </div>
+    <!-- Edición -->
     <div class="tb-group">
       <button class="tb-btn icon" id="btnUndo" data-i18n-title="t_undo" title="Deshacer (Ctrl+Z)">↶</button>
       <button class="tb-btn icon" id="btnRedo" data-i18n-title="t_redo" title="Rehacer (Ctrl+Y)">↷</button>
-    </div>
-    <div class="tb-group">
       <button class="tb-btn icon" id="btnCut" data-i18n-title="t_cut" title="Cortar (Ctrl+X)">✂️</button>
       <button class="tb-btn icon" id="btnCopy" data-i18n-title="t_copy" title="Copiar (Ctrl+C)">⧉</button>
       <button class="tb-btn icon" id="btnPaste" data-i18n-title="t_paste" title="Pegar (Ctrl+V)">📋</button>
     </div>
+    <!-- Transformación: Tamaño, Mover, Voltear H, Fondo -->
     <div class="tb-group">
-      <button class="tb-btn mode-btn mode-paint" id="btnModePaint" data-i18n="b_terrain" title="">🖌️ Terreno</button>
-      <button class="tb-btn mode-btn mode-place" id="btnModePlace" data-active="1" data-i18n="b_objects" title="">🧩 Objetos</button>
+      <button class="tb-btn icon" id="btnResize" title="Cambiar tamaño">📐</button>
+      <button class="tb-btn icon" id="btnMove" title="Mover">✋</button>
+      <button class="tb-btn icon" id="btnFlipH" data-i18n-title="t_flipH" title="Voltear horizontal">⇄</button>
+      <button class="tb-btn icon" id="btnBg" data-i18n-title="t_bg" title="Fondo">◐</button>
     </div>
+    <!-- Modo -->
     <div class="tb-group">
-      <button class="tb-btn" id="btnFolder" data-i18n="b_folder">📁 Cargar carpeta Cache…</button>
+      <button class="tb-btn icon mode-btn mode-paint" id="btnModePaint" data-i18n-title="b_terrain" title="Terreno">🖌️</button>
+      <button class="tb-btn icon mode-btn mode-place" id="btnModePlace" data-active="1" data-i18n-title="b_objects" title="Objetos">🧩</button>
     </div>
+    <!-- Herramientas MDL16 -->
     <div class="tb-group">
-      <button class="tb-btn icon" id="btnFlipH" data-i18n-title="t_flipH" title="">⇄</button>
-      <button class="tb-btn icon" id="btnFlipV" data-i18n-title="t_flipV" title="">⇅</button>
-      <button class="tb-btn icon" id="btnBg" data-i18n-title="t_bg" title="">◐</button>
+      <button class="tb-btn icon" id="btnShiftTool" title="Ajustador Shift MDL16">🎯</button>
+      <button class="tb-btn icon" id="btnExtractTool" title="Extractor de capas MDL16">📦</button>
+      <button class="tb-btn icon" id="btnConvertTool" title="Conversor MDL16 → PNG">🏞️</button>
     </div>
     <div class="spacer"></div>
     <div class="hint" id="modeHint"></div>
@@ -219,7 +230,7 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
       <button class="tb-btn" id="btnLang" title="Idioma / Language">
         <span class="fl" data-lang="es" data-active="1">🇪🇸</span><span class="fl" data-lang="en">🇬🇧</span>
       </button>
-      <button class="tb-btn" id="btnAbout" data-i18n="b_credits">ℹ️ Créditos</button>
+      <button class="tb-btn icon" id="btnAbout" data-i18n-title="b_credits" title="Créditos">ℹ️</button>
     </div>
   </div>
 
@@ -1326,7 +1337,6 @@ $('bbFill').onclick=()=>{ const L=activeTerrLayer(); if(!L){ toast(t('t_needLaye
 $('bbClear').onclick=()=>{ const L=activeTerrLayer(); if(!L){ toast(t('t_needLayer'),true); return; } pushTerrUndo(L); L._mask.getContext('2d').clearRect(0,0,L._mask.width,L._mask.height); renderTerrLayer(L); compositeTerrain(); markDirty(); renderMinimap(); };
 function flipSel(axis){ const o=obj(state.selObj); if(!o) return; pushUndo(); if(axis==='h') o.flipH=!o.flipH; else o.flipV=!o.flipV; markDirty(); renderMinimap(); }
 $('btnFlipH').onclick=()=>flipSel('h');
-$('btnFlipV').onclick=()=>flipSel('v');
 $('btnBg').onclick=()=>{ bgMode = bgMode==='dark'?'checker':(bgMode==='checker'?'light':'dark'); markDirty(); };
 
 /* ============================================================ UNDO / CLIPBOARD */
@@ -1599,6 +1609,335 @@ function toast(msg, warn){ const el=$('toast'); el.textContent=msg; el.className
 $('decoderView').textContent = $('decoderSrc').textContent;
 applyLang();
 resizeCanvas(); renderObjList(); updateStatus(); renderMinimap();
+
+/* ============================================================ HERRAMIENTAS MDL16 */
+// --- Decodificador MDL16/FRM16 ---
+const MDL = {
+  findFrames(d){
+    const frames=[];
+    for(let i=0;i<d.length-20;i++){
+      if(d[i]===0x01 && d[i+1]===0x32 && d[i+2]===0x10){
+        const ws=d[i+7]|(d[i+8]<<8), hs=d[i+9]|(d[i+10]<<8);
+        if(ws>0&&ws<=4096&&hs>0&&hs<=4096) frames.push({offset:i,width:ws,height:hs,dataStart:i+42});
+      }
+    }
+    return frames;
+  },
+  nextMarker(d,start){
+    for(let i=start;i<d.length-3;i++){
+      if(d[i]===0x04&&d[i+1]===0&&d[i+2]===0&&d[i+3]===0) return i;
+    }
+    return d.length;
+  },
+  decodeRLE(d,start,end,width){
+    const rows=[]; let row=new Array(width).fill(null), x=0, pos=start;
+    const flush=()=>{rows.push(row);row=new Array(width).fill(null);x=0;};
+    while(pos<end&&pos<d.length){
+      const ctrl=d[pos++];
+      if(ctrl&0x80){ const n=ctrl&0x7F; for(let i=0;i<n;i++){x++;if(x>=width)flush();} }
+      else if(ctrl&0x40){ const c=ctrl&0x3F; for(let i=0;i<c;i++){ if(pos+1>=d.length)break; row[x]=d[pos]|(d[pos+1]<<8); pos+=2;x++; if(x>=width)flush(); } }
+      else{ const c=ctrl&0x3F; if(pos+1<d.length){ const v=d[pos]|(d[pos+1]<<8); pos+=2; for(let i=0;i<c;i++){row[x]=v;x++;if(x>=width)flush();} } }
+    }
+    if(row.some(p=>p!==null)) rows.push(row);
+    return rows;
+  },
+  // Devuelve {frames:[{width,height,rows}]}
+  decodeAll(d){
+    const frames=this.findFrames(d);
+    return frames.map(f=>{
+      const end=this.nextMarker(d,f.dataStart);
+      const rows=this.decodeRLE(d,f.dataStart,end,f.width);
+      let opaque=0;
+      for(const r of rows) for(const p of r) if(p!==null&&p!==0xFFFF) opaque++;
+      return {width:f.width,height:f.height,rows,opaque};
+    });
+  },
+  // Renderiza filas a canvas con shift opcional y autocrop
+  toCanvas(rows,width,shift=0,autocrop=false){
+    const height=rows.length;
+    const cv=document.createElement('canvas'); cv.width=width; cv.height=height;
+    const ctx=cv.getContext('2d'); const img=ctx.createImageData(width,height); const data=img.data;
+    for(let y=0;y<height;y++){ const row=rows[y];
+      for(let x=0;x<width;x++){ const v=row[x];
+        if(v!==null&&v!==0xFFFF){
+          const nx=(x+shift)%width; const idx=(y*width+nx)*4;
+          data[idx]=((v>>11)&31)*255/31|0; data[idx+1]=((v>>5)&63)*255/63|0; data[idx+2]=(v&31)*255/31|0; data[idx+3]=255;
+        }
+      }
+    }
+    ctx.putImageData(img,0,0);
+    if(autocrop){
+      let minX=width,maxX=-1,minY=height,maxY=-1;
+      for(let y=0;y<height;y++)for(let x=0;x<width;x++){ if(data[(y*width+x)*4+3]>0){ if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y; } }
+      if(maxX>=minX&&maxY>=minY){
+        const w=maxX-minX+1,h=maxY-minY+1;
+        const c2=document.createElement('canvas'); c2.width=w; c2.height=h;
+        c2.getContext('2d').drawImage(cv,minX,minY,w,h,0,0,w,h);
+        return c2;
+      }
+    }
+    return cv;
+  }
+};
+
+// --- Override storage (IndexedDB) ---
+let _odb=null;
+function odbInit(){
+  return new Promise((res,rej)=>{
+    const rq=indexedDB.open('LionheartOverride',1);
+    rq.onerror=()=>rej(rq.error);
+    rq.onsuccess=()=>{_odb=rq.result;res();};
+    rq.onupgradeneeded=e=>{ const db=e.target.result; if(!db.objectStoreNames.contains('files')) db.createObjectStore('files',{keyPath:'path'}); };
+  });
+}
+odbInit();
+async function odbSave(path,blob,meta){
+  const buf=await blob.arrayBuffer();
+  const tx=_odb.transaction('files','readwrite');
+  tx.objectStore('files').put({path,data:buf,...meta});
+  return new Promise(r=>tx.oncomplete=r);
+}
+
+// --- Modal genérico para herramientas ---
+function mdlModal(title,bodyHtml){
+  let m=$('mdlToolModal');
+  if(!m){
+    m=document.createElement('div'); m.id='mdlToolModal'; m.className='modal-bg';
+    m.innerHTML=`<div class="modal" style="width:min(880px,96vw)">
+      <button class="modal-x" onclick="document.getElementById('mdlToolModal').classList.remove('show')">✕</button>
+      <div class="modal-body" id="mdlToolBody"></div>
+    </div>`;
+    document.body.appendChild(m);
+    m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('show'); });
+  }
+  $('mdlToolBody').innerHTML=`<h2 style="margin-bottom:14px">${title}</h2>`+bodyHtml;
+  m.classList.add('show');
+  return $('mdlToolBody');
+}
+
+// ============ AJUSTADOR SHIFT ============
+let _shiftState={frames:null,active:0,shifts:[],fileName:''};
+$('btnShiftTool').onclick=()=>{
+  const body=mdlModal('🎯 Ajustador de Shift MDL16',`
+    <div id="shiftDrop" style="border:3px dashed var(--gold);padding:34px;text-align:center;border-radius:12px;cursor:pointer">
+      <p style="font-size:1.1em">📄 Arrastra o haz clic para cargar un <b>.mdl16</b></p>
+      <p style="color:var(--muted);font-size:.85em;margin-top:6px">Se mostrarán todas las capas para ajustar individualmente</p>
+      <input type="file" id="shiftFile" accept=".mdl16" style="display:none">
+    </div>
+    <div id="shiftWork" style="display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0" id="shiftTabs"></div>
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:18px">
+        <div style="text-align:center;background:repeating-conic-gradient(#191d22 0 25%,#20252c 0 50%) 0/16px 16px;border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;max-height:460px">
+          <canvas id="shiftCv" style="image-rendering:pixelated;max-width:100%"></canvas>
+        </div>
+        <div>
+          <div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:14px">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gold-dim);margin-bottom:8px">Capa activa</div>
+            <div id="shiftInfo" style="font-size:13px;margin-bottom:14px;color:#c8cfd8"></div>
+            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">Desplazamiento (shift)</label>
+            <input type="range" id="shiftRange" min="0" max="500" value="0" style="width:100%;accent-color:var(--gold)" oninput="shiftUpdate()">
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+              <input type="number" id="shiftNum" value="0" style="width:90px;padding:7px;background:#0e1115;border:1px solid var(--line);border-radius:5px;color:var(--gold);font-weight:bold" oninput="shiftSync()">
+              <button class="tb-btn" style="padding:7px 10px" onclick="shiftAuto()">Auto</button>
+            </div>
+          </div>
+          <button class="dlbtn" style="width:100%;margin-top:14px" onclick="shiftSaveOverride()">💾 Guardar capa en Override</button>
+          <button class="dlbtn" style="width:100%;margin-top:8px;background:var(--green);color:#062b10" onclick="shiftSaveAll()">💾 Guardar TODAS las capas</button>
+          <p style="color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5">Se guarda como PNG en <code style="color:var(--gold)">Override/&lt;ruta&gt;</code> dentro del caché del navegador. Usa el botón de exportar del gestor para descargarlas.</p>
+        </div>
+      </div>
+    </div>
+  `);
+  const drop=$('shiftDrop'), inp=$('shiftFile');
+  drop.onclick=()=>inp.click();
+  drop.ondragover=e=>{e.preventDefault();drop.style.background='rgba(232,181,75,.08)';};
+  drop.ondragleave=()=>drop.style.background='';
+  drop.ondrop=e=>{e.preventDefault();drop.style.background='';shiftLoad(e.dataTransfer.files[0]);};
+  inp.onchange=e=>shiftLoad(e.target.files[0]);
+};
+
+function shiftLoad(file){
+  if(!file||!/\.mdl16$/i.test(file.name)){ toast('Selecciona un archivo .mdl16',true); return; }
+  const rd=new FileReader();
+  rd.onload=e=>{
+    const d=new Uint8Array(e.target.result);
+    const frames=MDL.decodeAll(d);
+    if(!frames.length){ toast('No se encontraron capas',true); return; }
+    _shiftState={frames,active:0,shifts:frames.map(()=>0),fileName:file.webkitRelativePath||file.name};
+    $('shiftDrop').style.display='none';
+    $('shiftWork').style.display='block';
+    // Tabs de capas
+    $('shiftTabs').innerHTML=frames.map((f,i)=>
+      `<button class="tb-btn" id="shiftTab${i}" onclick="shiftSelect(${i})" style="${i===0?'background:var(--gold);color:#1a1205':''}">Capa ${i} · ${f.width}×${f.height}${f.opaque===0?' (vacía)':''}</button>`
+    ).join('');
+    shiftSelect(0);
+  };
+  rd.readAsArrayBuffer(file);
+}
+
+function shiftSelect(i){
+  _shiftState.active=i;
+  const f=_shiftState.frames[i];
+  _shiftState.frames.forEach((_,j)=>{ const t=$('shiftTab'+j); if(t){ t.style.background=j===i?'var(--gold)':''; t.style.color=j===i?'#1a1205':''; } });
+  $('shiftInfo').innerHTML=`Capa <b>${i}</b> · ${f.width}×${f.height}<br>Píxeles visibles: ${f.opaque}`;
+  $('shiftRange').max=f.width;
+  $('shiftRange').value=_shiftState.shifts[i];
+  $('shiftNum').value=_shiftState.shifts[i];
+  shiftRender();
+}
+
+function shiftRender(){
+  const i=_shiftState.active, f=_shiftState.frames[i];
+  const cv=$('shiftCv');
+  const src=MDL.toCanvas(f.rows,f.width,_shiftState.shifts[i],false);
+  cv.width=src.width; cv.height=src.height;
+  cv.getContext('2d').drawImage(src,0,0);
+}
+
+function shiftUpdate(){ const i=_shiftState.active; _shiftState.shifts[i]=parseInt($('shiftRange').value); $('shiftNum').value=_shiftState.shifts[i]; shiftRender(); }
+function shiftSync(){ const i=_shiftState.active; _shiftState.shifts[i]=parseInt($('shiftNum').value)||0; $('shiftRange').value=_shiftState.shifts[i]; shiftRender(); }
+function shiftAuto(){
+  // Auto: busca la columna con menos píxeles opacos (mínima costura)
+  const i=_shiftState.active, f=_shiftState.frames[i];
+  const col=new Array(f.width).fill(0);
+  for(const row of f.rows) for(let x=0;x<f.width;x++){ const v=row[x]; if(v!==null&&v!==0xFFFF) col[x]++; }
+  let minX=0,minV=Infinity; for(let x=0;x<f.width;x++) if(col[x]<minV){minV=col[x];minX=x;}
+  _shiftState.shifts[i]=(f.width-minX)%f.width;
+  $('shiftRange').value=_shiftState.shifts[i]; $('shiftNum').value=_shiftState.shifts[i]; shiftRender();
+}
+
+function overridePathFor(origPath,layer){
+  // Override/<ruta original sin extensión>_L<n>.png  (capa 0 sin sufijo)
+  const noExt=origPath.replace(/\.mdl16$/i,'');
+  const suffix=layer===0?'':`_L${layer}`;
+  return `Override/${noExt}${suffix}.png`;
+}
+
+async function shiftSaveOverride(){
+  const i=_shiftState.active, f=_shiftState.frames[i];
+  const cv=MDL.toCanvas(f.rows,f.width,_shiftState.shifts[i],false);
+  cv.toBlob(async blob=>{
+    const path=overridePathFor(_shiftState.fileName,i);
+    await odbSave(path,blob,{shift:_shiftState.shifts[i],date:new Date().toISOString()});
+    toast('✅ Guardada en '+path);
+  });
+}
+
+async function shiftSaveAll(){
+  let n=0;
+  for(let i=0;i<_shiftState.frames.length;i++){
+    const f=_shiftState.frames[i];
+    if(f.opaque===0) continue; // saltar capas vacías
+    await new Promise(res=>{
+      const cv=MDL.toCanvas(f.rows,f.width,_shiftState.shifts[i],false);
+      cv.toBlob(async blob=>{ await odbSave(overridePathFor(_shiftState.fileName,i),blob,{shift:_shiftState.shifts[i],date:new Date().toISOString()}); n++; res(); });
+    });
+  }
+  toast(`✅ ${n} capas guardadas en Override`);
+}
+
+// ============ EXTRACTOR DE CAPAS ============
+$('btnExtractTool').onclick=()=>{
+  const body=mdlModal('📦 Extractor de Capas MDL16 → PNG',`
+    <div id="extDrop" style="border:3px dashed var(--gold);padding:34px;text-align:center;border-radius:12px;cursor:pointer">
+      <p style="font-size:1.1em">📂 Selecciona una carpeta con archivos <b>.mdl16</b></p>
+      <p style="color:var(--muted);font-size:.85em;margin-top:6px">Extrae TODAS las capas de cada archivo por separado</p>
+      <input type="file" id="extFolder" webkitdirectory directory multiple style="display:none">
+    </div>
+    <div id="extStatus" style="margin-top:14px;color:var(--muted);text-align:center"></div>
+    <button class="dlbtn" id="extGo" disabled style="width:100%;margin-top:14px;opacity:.5">Extraer todas las capas (ZIP)</button>
+    <div id="extLog" style="background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px;font-family:ui-monospace,monospace;font-size:11px;max-height:240px;overflow:auto;display:none"></div>
+  `);
+  let extFiles=[];
+  const drop=$('extDrop'), inp=$('extFolder'), go=$('extGo');
+  drop.onclick=()=>inp.click();
+  inp.onchange=e=>{
+    extFiles=Array.from(e.target.files).filter(f=>/\.mdl16$/i.test(f.name));
+    $('extStatus').textContent=extFiles.length?`✅ ${extFiles.length} archivos .mdl16 encontrados`:'❌ No hay .mdl16';
+    go.disabled=!extFiles.length; go.style.opacity=extFiles.length?'1':'.5';
+  };
+  go.onclick=async()=>{
+    const log=$('extLog'); log.style.display='block'; log.innerHTML='';
+    const zip=new JSZip(); let count=0;
+    for(const file of extFiles){
+      const d=new Uint8Array(await file.arrayBuffer());
+      const frames=MDL.decodeAll(d);
+      const rel=(file.webkitRelativePath||file.name).replace(/\.mdl16$/i,'');
+      let saved=0;
+      frames.forEach((f,i)=>{
+        if(f.opaque===0) return;
+        const cv=MDL.toCanvas(f.rows,f.width,0,true);
+        const name=i===0?`${rel}.png`:`${rel}_L${i}.png`;
+        zip.file(name,new Promise(res=>cv.toBlob(res)));
+        count++; saved++;
+      });
+      const line=document.createElement('div'); line.style.color='#5fbf6e';
+      line.textContent=`✓ ${file.name}: ${saved} capas`; log.appendChild(line); log.scrollTop=log.scrollHeight;
+    }
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Capas_Extraidas.zip'; a.click();
+    const done=document.createElement('div'); done.style.color='#e8b54b'; done.textContent=`✅ ${count} PNG generados`; log.appendChild(done);
+  };
+};
+
+// ============ CONVERSOR PNG (con Auto-shift opcional) ============
+$('btnConvertTool').onclick=()=>{
+  const body=mdlModal('🏞️ Conversor MDL16 → PNG',`
+    <div id="cnvDrop" style="border:3px dashed var(--gold);padding:34px;text-align:center;border-radius:12px;cursor:pointer">
+      <p style="font-size:1.1em">📂 Selecciona una carpeta con archivos <b>.mdl16</b></p>
+      <p style="color:var(--muted);font-size:.85em;margin-top:6px">Convierte la capa principal de cada archivo a PNG</p>
+      <input type="file" id="cnvFolder" webkitdirectory directory multiple style="display:none">
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;color:#c8cfd8;font-size:13px;justify-content:center">
+      <input type="checkbox" id="cnvAuto" checked> Aplicar auto-shift (centrar imagen)
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;color:#c8cfd8;font-size:13px;justify-content:center">
+      <input type="checkbox" id="cnvCrop" checked> Recortar al contenido
+    </label>
+    <div id="cnvStatus" style="margin-top:14px;color:var(--muted);text-align:center"></div>
+    <button class="dlbtn" id="cnvGo" disabled style="width:100%;margin-top:14px;opacity:.5">Convertir a PNG (ZIP)</button>
+    <div id="cnvLog" style="background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px;font-family:ui-monospace,monospace;font-size:11px;max-height:240px;overflow:auto;display:none"></div>
+  `);
+  let cnvFiles=[];
+  const drop=$('cnvDrop'), inp=$('cnvFolder'), go=$('cnvGo');
+  drop.onclick=()=>inp.click();
+  inp.onchange=e=>{
+    cnvFiles=Array.from(e.target.files).filter(f=>/\.mdl16$/i.test(f.name));
+    $('cnvStatus').textContent=cnvFiles.length?`✅ ${cnvFiles.length} archivos .mdl16`:'❌ No hay .mdl16';
+    go.disabled=!cnvFiles.length; go.style.opacity=cnvFiles.length?'1':'.5';
+  };
+  go.onclick=async()=>{
+    const log=$('cnvLog'); log.style.display='block'; log.innerHTML='';
+    const auto=$('cnvAuto').checked, crop=$('cnvCrop').checked;
+    const zip=new JSZip(); let count=0;
+    for(const file of cnvFiles){
+      const d=new Uint8Array(await file.arrayBuffer());
+      const frames=MDL.decodeAll(d);
+      if(!frames.length||frames[0].opaque===0){ continue; }
+      const f=frames[0];
+      let shift=0;
+      if(auto){ const col=new Array(f.width).fill(0); for(const row of f.rows)for(let x=0;x<f.width;x++){const v=row[x];if(v!==null&&v!==0xFFFF)col[x]++;} let minX=0,minV=Infinity; for(let x=0;x<f.width;x++)if(col[x]<minV){minV=col[x];minX=x;} shift=(f.width-minX)%f.width; }
+      const cv=MDL.toCanvas(f.rows,f.width,shift,crop);
+      const rel=(file.webkitRelativePath||file.name).replace(/\.mdl16$/i,'.png');
+      zip.file(rel,new Promise(res=>cv.toBlob(res)));
+      count++;
+      if(count%50===0){ const l=document.createElement('div'); l.style.color='#8b95a3'; l.textContent=`… ${count} procesados`; log.appendChild(l); log.scrollTop=log.scrollHeight; }
+    }
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Convertidos_PNG.zip'; a.click();
+    const done=document.createElement('div'); done.style.color='#e8b54b'; done.textContent=`✅ ${count} PNG generados`; log.appendChild(done);
+  };
+};
+
+// ============ PLACEHOLDERS para Resize/Move (UI futura) ============
+$('btnResize').onclick=()=>{
+  const o=obj(state.selObj);
+  if(!o){ toast('Selecciona un objeto primero',true); return; }
+  const nw=prompt('Nuevo ancho (px):',o.w); if(nw===null)return;
+  const nh=prompt('Nuevo alto (px):',o.h); if(nh===null)return;
+  pushUndo(); o.w=parseInt(nw)||o.w; o.h=parseInt(nh)||o.h; markDirty(); renderMinimap();
+};
+$('btnMove').onclick=()=>{ toast('Arrastra el objeto seleccionado en el lienzo para moverlo'); };
 </script>
 </body>
 </html>
