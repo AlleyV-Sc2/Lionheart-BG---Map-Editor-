@@ -47,6 +47,25 @@ input{font-family:inherit}
 .h-tree::before{background:var(--blue)}
 .h-prev::before{background:var(--red)}
 .h-obj::before{background:var(--green)}
+.h-terr::before{background:var(--orange)}
+#brushBar{display:none;align-items:center;gap:16px;padding:7px 12px;background:var(--panel2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.bb-group{display:flex;gap:4px}
+.bb-tool{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:15px;cursor:pointer;line-height:1}
+.bb-tool[data-active="1"]{background:var(--gold);border-color:var(--gold)}
+.bb-ctl{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.bb-ctl input[type=range]{width:118px;accent-color:var(--gold)}
+.bb-val{min-width:36px;color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.bb-hint{margin-left:auto;color:var(--muted);font-size:11px;font-style:italic}
+#terrList{overflow:auto;padding:4px 8px 8px;min-height:0}
+#rightbar{display:flex;flex-direction:column}
+#rightbar #terrList,#rightbar #objList{flex:1}
+.terr-empty{color:var(--muted);font-size:12px;padding:16px 12px;text-align:center;line-height:1.55}
+.terr-row{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px;margin-bottom:6px;cursor:pointer}
+.terr-row[data-active="1"]{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.terr-top{display:flex;align-items:center;gap:6px}
+.terr-thumb{width:34px;height:34px;border-radius:4px;border:1px solid var(--line);image-rendering:pixelated;flex:none}
+.terr-name{flex:1;font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.terr-op{width:100%;margin-top:7px;accent-color:var(--gold)}
 
 #minimapWrap{padding:0 10px 8px;border-bottom:1px solid var(--line)}
 #minimap{width:100%;height:150px;background:#0e1115;border:1px solid var(--line);border-radius:4px;display:block;cursor:crosshair;image-rendering:pixelated}
@@ -204,6 +223,22 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
     </div>
   </div>
 
+  <!-- ===== BRUSH BAR (solo modo Terreno) ===== -->
+  <div id="brushBar">
+    <div class="bb-group">
+      <button class="bb-tool" id="bbBrush" data-active="1" data-i18n-title="bb_brush" title="">🖌️</button>
+      <button class="bb-tool" id="bbEraser" data-i18n-title="bb_eraser" title="">🧽</button>
+    </div>
+    <div class="bb-group">
+      <button class="bb-tool" id="bbFill" data-i18n-title="bb_fill" title="">🪣</button>
+      <button class="bb-tool" id="bbClear" data-i18n-title="bb_clear" title="">🗑️</button>
+    </div>
+    <label class="bb-ctl"><span data-i18n="bb_size">Tamaño</span><input type="range" id="bbSize" min="8" max="420" value="96"><span class="bb-val" id="bbSizeV">96</span></label>
+    <label class="bb-ctl"><span data-i18n="bb_soft">Difuminado</span><input type="range" id="bbSoft" min="0" max="100" value="60"><span class="bb-val" id="bbSoftV">60%</span></label>
+    <label class="bb-ctl"><span data-i18n="bb_flow">Flujo</span><input type="range" id="bbFlow" min="4" max="100" value="55"><span class="bb-val" id="bbFlowV">55%</span></label>
+    <div class="bb-hint" data-i18n="bb_hint">Pinta sobre la capa activa para mezclar · [ ] tamaño · B/E pincel/borrador</div>
+  </div>
+
   <!-- ===== BODY ===== -->
   <div id="body">
     <div id="sidebar">
@@ -242,6 +277,12 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
 
     <!-- ===== RIGHT: LAYERS ===== -->
     <div id="rightbar">
+      <div class="panel-h h-terr" id="terrHead" style="display:none">
+        <span data-i18n="h_terr">Capas de terreno</span>
+        <span id="terrCount" style="margin-left:auto;color:var(--muted)"></span>
+        <button class="mini-btn" id="btnAddTerr" data-i18n-title="t_addterr" title="">➕</button>
+      </div>
+      <div id="terrList" style="display:none"></div>
       <div class="panel-h h-obj" id="objHead">
         <span data-i18n="h_layers">Capas</span>
         <span id="objCount" style="margin-left:auto;color:var(--muted)"></span>
@@ -565,9 +606,11 @@ const T = {
     t_undo:"Deshacer (Ctrl+Z)", t_redo:"Rehacer (Ctrl+Y)", t_cut:"Cortar (Ctrl+X)", t_copy:"Copiar (Ctrl+C)", t_paste:"Pegar (Ctrl+V)",
     hint_paint:"Modo: Terreno — clic para pintar la textura seleccionada",
     hint_place:"Modo: Objetos — arrastra un .png al mapa; mueve y reordena con el ratón",
-    h_minimap:"Minimapa", h_files:"Archivos · arrastra al mapa", ph_search:"Buscar archivo…  (escribe para filtrar)",
+    h_minimap:"Minimapa", h_files:"Archivos · arrastra al mapa", ph_search:"Buscar archivo…  (escribe para filtrar)", tree_empty:"Carga la carpeta Cache para ver texturas y objetos",
     h_preview:"Previsualización", prev_empty:"Selecciona un archivo", h_objects:"Objetos en el mapa",
     h_layers:"Capas", t_newfolder:"Nueva carpeta", grp_name:"Carpeta", t_flipH:"Voltear horizontal (H)", t_flipV:"Voltear vertical (V)", t_bg:"Cambiar fondo (claro / cuadros / oscuro)",
+    h_terr:"Capas de terreno", t_addterr:"Añadir capa (textura seleccionada)", t_needLayer:"Crea o selecciona una capa de terreno primero", terr_empty:"Sin capas de terreno.\nElige una textura en Archivos y pulsa ➕ (o arrástrala al mapa).", terr_opacity:"Opacidad de la capa", u_layer:"capa", u_layers:"capas",
+    bb_brush:"Pincel", bb_eraser:"Borrador", bb_size:"Tamaño", bb_soft:"Difuminado", bb_flow:"Flujo", bb_fill:"Rellenar capa", bb_clear:"Vaciar capa", bb_hint:"Pinta sobre la capa activa para mezclar · [ ] tamaño · B/E pincel/borrador",
     empty_h:"Editor de mapas para Infinity Engine",
     empty_p:"Carga la carpeta <code>Cache</code> de tu proyecto (la que contiene <code>Models</code> y <code>Textures</code> con los <code>.png</code> ya generados). Las rutas se conservan tal cual para que los mapas sean compatibles.",
     empty_btn:"📁 Cargar carpeta Cache…",
@@ -615,9 +658,11 @@ const T = {
     t_undo:"Undo (Ctrl+Z)", t_redo:"Redo (Ctrl+Y)", t_cut:"Cut (Ctrl+X)", t_copy:"Copy (Ctrl+C)", t_paste:"Paste (Ctrl+V)",
     hint_paint:"Mode: Terrain — click to paint the selected texture",
     hint_place:"Mode: Objects — drag a .png onto the map; move and reorder with the mouse",
-    h_minimap:"Minimap", h_files:"Files · drag onto the map", ph_search:"Search file…  (type to filter)",
+    h_minimap:"Minimap", h_files:"Files · drag onto the map", ph_search:"Search file…  (type to filter)", tree_empty:"Load the Cache folder to see textures and objects",
     h_preview:"Preview", prev_empty:"Select a file", h_objects:"Objects on the map",
     h_layers:"Layers", t_newfolder:"New folder", grp_name:"Folder", t_flipH:"Flip horizontal (H)", t_flipV:"Flip vertical (V)", t_bg:"Change background (light / checker / dark)",
+    h_terr:"Terrain layers", t_addterr:"Add layer (selected texture)", t_needLayer:"Create or select a terrain layer first", terr_empty:"No terrain layers.\nPick a texture in Files and press ➕ (or drag it onto the map).", terr_opacity:"Layer opacity", u_layer:"layer", u_layers:"layers",
+    bb_brush:"Brush", bb_eraser:"Eraser", bb_size:"Size", bb_soft:"Softness", bb_flow:"Flow", bb_fill:"Fill layer", bb_clear:"Clear layer", bb_hint:"Paint on the active layer to blend · [ ] size · B/E brush/eraser",
     empty_h:"Map editor for the Infinity Engine",
     empty_p:"Load your project's <code>Cache</code> folder (the one with <code>Models</code> and <code>Textures</code> and the generated <code>.png</code> files). Paths are kept exactly as-is so maps stay compatible.",
     empty_btn:"📁 Load Cache folder…",
@@ -695,6 +740,7 @@ const state = {
 function newMap(gw,gh){
   return { tileSize:TILE, gridW:gw, gridH:gh,
     terrain:Array.from({length:gh},()=>Array(gw).fill(null)),
+    terrainLayers:[], nextTerrId:1, activeTerr:null,
     objects:[], groups:[], nextId:1, nextGroupId:1 };
 }
 const toBack = p => p.replace(/\//g,'\\');
@@ -738,6 +784,7 @@ function buildTree(){
 }
 function renderTree(filter){
   const host=$('tree'); host.innerHTML='';
+  if(!state.tree){ const d=document.createElement('div'); d.className='terr-empty'; d.textContent=t('tree_empty'); host.appendChild(d); return; }
   host.appendChild(renderNode(state.tree, 0, (filter||'').trim().toLowerCase(), true));
 }
 function activeKind(){ return state.mode==='paint' ? 'tex' : 'obj'; }
@@ -804,7 +851,7 @@ function getImage(key){
   const info=state.files.get(key); if(!info) return null;
   state.pending.add(key);
   const img=new Image();
-  img.onload=()=>{ state.imgCache.set(key,img); state.pending.delete(key); markDirty(); renderMinimap(); };
+  img.onload=()=>{ state.imgCache.set(key,img); state.pending.delete(key); markDirty(); renderMinimap(); onTexLoaded(key); };
   img.onerror=()=>state.pending.delete(key);
   img.src=URL.createObjectURL(info.file);
   return null;
@@ -834,7 +881,11 @@ const cam=state.cam;
 const w2sX=wx=>(wx-cam.x)*cam.zoom, w2sY=wy=>(wy-cam.y)*cam.zoom;
 const s2wX=sx=>sx/cam.zoom+cam.x, s2wY=sy=>sy/cam.zoom+cam.y;
 function markDirty(){ state.dirty=true; }
-function loop(){ if(state.dirty){ draw(); state.dirty=false; } requestAnimationFrame(loop); }
+function loop(){
+  if(terrDirty){ const L=activeTerrLayer(); if(L) renderTerrLayer(L); compositeTerrain(); terrDirty=false; state.dirty=true; }
+  if(state.dirty){ draw(); state.dirty=false; }
+  requestAnimationFrame(loop);
+}
 requestAnimationFrame(loop);
 
 let bgMode='dark';
@@ -842,6 +893,102 @@ function drawImgFlipped(c,img,x,y,w,h,fh,fv){
   if(!fh&&!fv){ c.drawImage(img,x,y,w,h); return; }
   c.save(); c.translate(x+(fh?w:0),y+(fv?h:0)); c.scale(fh?-1:1,fv?-1:1); c.drawImage(img,0,0,w,h); c.restore();
 }
+/* ===================== TERRENO: capas + mezcla por máscaras (splatmap) ===================== */
+const MASKCAP = 1024;
+const terrainCanvas = document.createElement('canvas');
+let terrDirty=false, brushWX=null, brushWY=null, lastPaint=null;
+const brush = { tool:'brush', size:96, soft:0.6, flow:0.55 };
+
+function maskDims(mp){ mp=mp||state.map; const W=mp.gridW*TILE, H=mp.gridH*TILE; const s=Math.min(1, MASKCAP/Math.max(W,H,1)); return { w:Math.max(1,Math.round(W*s)), h:Math.max(1,Math.round(H*s)), s }; }
+function texLabel(key){ if(!key) return 'Capa'; return key.replace(/\\/g,'/').split('/').pop().replace(/\.[^.]+$/,''); }
+function makeMaskCanvas(){ const {w,h}=maskDims(); const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function makeTerrLayer(texKey){ return { id:state.map.nextTerrId++, texKey, name:texLabel(texKey), opacity:1, visible:true, _mask:makeMaskCanvas(), _rendered:makeMaskCanvas() }; }
+function activeTerrLayer(){ return state.map.terrainLayers.find(L=>L.id===state.map.activeTerr) || null; }
+
+function renderTerrLayer(L){
+  const {w,h,s}=maskDims();
+  if(L._mask.width!==w || L._mask.height!==h){ const nm=document.createElement('canvas'); nm.width=w; nm.height=h; nm.getContext('2d').drawImage(L._mask,0,0,w,h); L._mask=nm; L._rendered=makeMaskCanvas(); }
+  const rc=L._rendered.getContext('2d'); rc.clearRect(0,0,w,h);
+  const tex=getImage(L.texKey);
+  if(tex){ const pat=rc.createPattern(tex,'repeat'); rc.save(); rc.imageSmoothingEnabled=true; rc.scale(s,s); rc.fillStyle=pat; rc.fillRect(0,0,w/s,h/s); rc.restore(); }
+  else { rc.fillStyle='#39414f'; rc.fillRect(0,0,w,h); }
+  rc.globalCompositeOperation='destination-in'; rc.drawImage(L._mask,0,0); rc.globalCompositeOperation='source-over';
+}
+function compositeTerrain(){
+  const {w,h}=maskDims();
+  if(terrainCanvas.width!==w||terrainCanvas.height!==h){ terrainCanvas.width=w; terrainCanvas.height=h; }
+  const tc=terrainCanvas.getContext('2d'); tc.clearRect(0,0,w,h);
+  for(const L of state.map.terrainLayers){ if(L.visible===false) continue; tc.globalAlpha=(L.opacity==null?1:L.opacity); tc.drawImage(L._rendered,0,0); }
+  tc.globalAlpha=1;
+}
+function rebuildAllTerr(){ for(const L of state.map.terrainLayers) renderTerrLayer(L); compositeTerrain(); markDirty(); renderMinimap(); }
+function onTexLoaded(key){ let any=false; for(const L of state.map.terrainLayers) if(L.texKey===key){ renderTerrLayer(L); any=true; } if(any){ compositeTerrain(); markDirty(); } }
+
+// pincel suave sobre la capa activa
+function brushStamp(wx,wy){
+  const L=activeTerrLayer(); if(!L) return false;
+  const {s}=maskDims(); const mc=L._mask.getContext('2d');
+  const rad=Math.max(0.6, brush.size*0.5*s), a=Math.max(0.04,brush.flow), hard=Math.max(0,Math.min(0.99, 1-brush.soft));
+  const mx=wx*s, my=wy*s;
+  const g=mc.createRadialGradient(mx,my,0, mx,my,rad);
+  const col=brush.tool==='eraser'?'0,0,0':'255,255,255';
+  g.addColorStop(0,`rgba(${col},${a})`); g.addColorStop(hard,`rgba(${col},${a})`); g.addColorStop(1,`rgba(${col},0)`);
+  mc.globalCompositeOperation = brush.tool==='eraser'?'destination-out':'source-over';
+  mc.fillStyle=g; mc.beginPath(); mc.arc(mx,my,rad,0,Math.PI*2); mc.fill();
+  mc.globalCompositeOperation='source-over';
+  return true;
+}
+function brushStroke(wx,wy){
+  const L=activeTerrLayer(); if(!L){ toast(t('t_needLayer'),true); return; }
+  if(lastPaint){ const dx=wx-lastPaint.x, dy=wy-lastPaint.y, dist=Math.hypot(dx,dy), step=Math.max(1,brush.size*0.2), n=Math.floor(dist/step);
+    for(let i=1;i<=n;i++) brushStamp(lastPaint.x+dx*i/n, lastPaint.y+dy*i/n); }
+  brushStamp(wx,wy); lastPaint={x:wx,y:wy}; terrDirty=true; markDirty();
+}
+
+// undo de terreno (máscara como dataURL comprimido)
+function terrUndoEntry(L){ return {kind:'terr', layerId:L.id, before:L._mask.toDataURL()}; }
+function pushTerrUndo(L){ if(!L)return; state.undo.push(terrUndoEntry(L)); if(state.undo.length>60) state.undo.shift(); state.redo.length=0; }
+function loadMaskDataURL(L,url){ const img=new Image(); img.onload=()=>{ const mc=L._mask.getContext('2d'); mc.clearRect(0,0,L._mask.width,L._mask.height); mc.drawImage(img,0,0,L._mask.width,L._mask.height); renderTerrLayer(L); compositeTerrain(); markDirty(); renderMinimap(); }; img.src=url; }
+
+// rejilla antigua -> capas (compatibilidad)
+function gridToLayers(m, grid, resolve){
+  const byTex=new Map();
+  for(let r=0;r<m.gridH;r++)for(let c=0;c<m.gridW;c++){ const k=resolve((grid&&grid[r]||[])[c]??null); if(!k)continue; if(!byTex.has(k))byTex.set(k,[]); byTex.get(k).push([c,r]); }
+  const {s}=maskDims(m);
+  for(const [key,cells] of byTex){ const L={id:m.nextTerrId++, texKey:key, name:texLabel(key), opacity:1, visible:true, _mask:makeMaskCanvas(), _rendered:makeMaskCanvas()};
+    const mc=L._mask.getContext('2d'); mc.fillStyle='#fff'; for(const [c,r] of cells) mc.fillRect(c*TILE*s, r*TILE*s, TILE*s+1, TILE*s+1); m.terrainLayers.push(L); }
+}
+
+// ---- panel de capas de terreno ----
+function renderTerrList(){
+  const box=$('terrList'); if(!box) return; box.innerHTML='';
+  const layers=state.map.terrainLayers;
+  $('terrCount').textContent = layers.length ? (layers.length+' '+t(layers.length===1?'u_layer':'u_layers')) : '';
+  if(!layers.length){ const e=document.createElement('div'); e.className='terr-empty'; e.textContent=t('terr_empty'); box.appendChild(e); return; }
+  for(let i=layers.length-1;i>=0;i--) box.appendChild(makeTerrRow(layers[i], i));
+}
+function makeTerrRow(L, idx){
+  const row=document.createElement('div'); row.className='terr-row'; if(L.id===state.map.activeTerr) row.dataset.active='1';
+  const thumb=document.createElement('canvas'); thumb.className='terr-thumb'; thumb.width=34; thumb.height=34;
+  const tex=getImage(L.texKey), tc=thumb.getContext('2d'); tc.imageSmoothingEnabled=true; if(tex) tc.drawImage(tex,0,0,34,34); else { tc.fillStyle='#39414f'; tc.fillRect(0,0,34,34); }
+  const name=document.createElement('div'); name.className='terr-name'; name.textContent=L.name; name.title=L.name;
+  const mk=(txt,cls,fn,title)=>{ const b=document.createElement('button'); b.className='mini-btn'; b.textContent=txt; if(title)b.title=title; b.onclick=e=>{ e.stopPropagation(); fn(); }; return b; };
+  const eye=mk(L.visible===false?'🚫':'👁','', ()=>{ L.visible=!(L.visible!==false); compositeTerrain(); markDirty(); renderMinimap(); renderTerrList(); });
+  const up =mk('▲','', ()=>moveTerr(idx,+1));
+  const dn =mk('▼','', ()=>moveTerr(idx,-1));
+  const del=mk('🗑','', ()=>delTerr(L.id));
+  const top=document.createElement('div'); top.className='terr-top'; top.append(thumb,name,eye,up,dn,del);
+  const op=document.createElement('input'); op.type='range'; op.min=0; op.max=100; op.value=Math.round((L.opacity==null?1:L.opacity)*100); op.className='terr-op'; op.title=t('terr_opacity');
+  op.oninput=e=>{ e.stopPropagation(); L.opacity=op.value/100; compositeTerrain(); markDirty(); renderMinimap(); };
+  op.onclick=e=>e.stopPropagation();
+  row.append(top, op);
+  row.onclick=()=>{ state.map.activeTerr=L.id; renderTerrList(); };
+  return row;
+}
+function moveTerr(idx,dir){ const a=state.map.terrainLayers, j=idx+dir; if(j<0||j>=a.length)return; const t0=a[idx]; a[idx]=a[j]; a[j]=t0; compositeTerrain(); markDirty(); renderMinimap(); renderTerrList(); }
+function delTerr(id){ const a=state.map.terrainLayers, i=a.findIndex(L=>L.id===id); if(i<0)return; a.splice(i,1); if(state.map.activeTerr===id) state.map.activeTerr=a.length?a[a.length-1].id:null; compositeTerrain(); markDirty(); renderMinimap(); renderTerrList(); }
+function addTerrLayer(key){ if(!key){ toast(t('t_needTex'),true); return null; } const L=makeTerrLayer(key); state.map.terrainLayers.push(L); state.map.activeTerr=L.id; renderTerrLayer(L); compositeTerrain(); renderTerrList(); markDirty(); renderMinimap(); return L; }
+
 function draw(){
   const W=cv.clientWidth, H=cv.clientHeight;
   const out = bgMode==='light'?'#b8bcc4':(bgMode==='checker'?'#23272e':'#0c0e11');
@@ -860,15 +1007,9 @@ function draw(){
   const c0=Math.max(0,Math.floor(s2wX(0)/TILE)), r0=Math.max(0,Math.floor(s2wY(0)/TILE));
   const c1=Math.min(m.gridW-1,Math.ceil(s2wX(W)/TILE)), r1=Math.min(m.gridH-1,Math.ceil(s2wY(H)/TILE));
 
-  // terrain — smoothing OFF (crisp tiles, no seams), 1px overlap
-  ctx.imageSmoothingEnabled=false;
-  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
-    const key=m.terrain[r][c]; if(!key) continue;
-    const img=getImage(key);
-    const x=w2sX(c*TILE), y=w2sY(r*TILE), s=TILE*cam.zoom;
-    if(img) ctx.drawImage(img,x,y,Math.ceil(s)+1,Math.ceil(s)+1);
-    else { ctx.fillStyle='#23282f'; ctx.fillRect(x,y,s,s); }
-  }
+  // terrain — splatmap compuesto (mezcla de texturas por máscaras)
+  ctx.imageSmoothingEnabled=true;
+  if(terrainCanvas.width>0) ctx.drawImage(terrainCanvas, mX, mY, mW, mH);
   // grid lines (screen only)
   if(cam.zoom>0.18){
     ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.lineWidth=1; ctx.beginPath();
@@ -892,6 +1033,15 @@ function draw(){
       [[x,y],[x+ww,y],[x,y+hh],[x+ww,y+hh]].forEach(([px,py])=>ctx.fillRect(px-tk,py-tk,tk*2,tk*2));
     }
   }
+
+  // cursor del pincel (modo terreno)
+  if(state.mode==='paint' && brushWX!=null){
+    const sx=w2sX(brushWX), sy=w2sY(brushWY), rr=Math.max(2,brush.size*0.5*cam.zoom);
+    ctx.save(); ctx.lineWidth=1.5; ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.beginPath(); ctx.arc(sx,sy,rr+1,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = brush.tool==='eraser' ? '#e07b39' : '#e3c64b'; ctx.beginPath(); ctx.arc(sx,sy,rr,0,Math.PI*2); ctx.stroke();
+    if(brush.soft>0.02){ ctx.setLineDash([3,3]); ctx.globalAlpha=.5; ctx.beginPath(); ctx.arc(sx,sy,rr*Math.max(0.05,1-brush.soft),0,Math.PI*2); ctx.stroke(); }
+    ctx.restore();
+  }
 }
 
 /* ============================================================ MINIMAP */
@@ -903,12 +1053,8 @@ function renderMinimap(){
   const mapW=m.gridW*TILE, mapH=m.gridH*TILE, sc=Math.min(W/mapW,H/mapH);
   const ox=(W-mapW*sc)/2, oy=(H-mapH*sc)/2; mm._sc=sc; mm._ox=ox; mm._oy=oy;
   mmx.fillStyle='#15191e'; mmx.fillRect(ox,oy,mapW*sc,mapH*sc);
-  mmx.imageSmoothingEnabled=false;
-  for(let r=0;r<m.gridH;r++) for(let c=0;c<m.gridW;c++){
-    const key=m.terrain[r][c]; if(!key) continue;
-    const img=state.imgCache.get(key); const x=ox+c*TILE*sc, y=oy+r*TILE*sc, s=TILE*sc+0.6;
-    if(img) mmx.drawImage(img,x,y,s,s); else { mmx.fillStyle='#2a2f37'; mmx.fillRect(x,y,s,s); }
-  }
+  mmx.imageSmoothingEnabled=true;
+  if(terrainCanvas.width>0) mmx.drawImage(terrainCanvas, ox, oy, mapW*sc, mapH*sc);
   mmx.fillStyle='#7fd08c';
   for(const o of m.objects){ if(!effVisible(o)) continue; mmx.fillRect(ox+(o.x+o.w/2)*sc-1, oy+(o.y+o.h/2)*sc-1, 2,2); }
   const vx=ox+cam.x*sc, vy=oy+cam.y*sc, vw=(cv.clientWidth/cam.zoom)*sc, vh=(cv.clientHeight/cam.zoom)*sc;
@@ -937,7 +1083,7 @@ cv.addEventListener('mousedown', e=>{
   const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
   const wx=s2wX(mx), wy=s2wY(my);
   if(e.button===1 || spaceDown){ dragMode='pan'; panStart={mx,my,cx:cam.x,cy:cam.y}; stage.dataset.mode='pan'; return; }
-  if(state.mode==='paint' && e.button===0){ dragMode='paint'; pushUndo(); paintAt(wx,wy); return; }
+  if(state.mode==='paint' && e.button===0){ const L=activeTerrLayer(); if(!L){ toast(t('t_needLayer'),true); return; } dragMode='paint'; pushTerrUndo(L); lastPaint=null; brushStroke(wx,wy); return; }
   if(e.button===0){
     const hit=hitObject(wx,wy);
     if(hit){ selectObject(hit.id); dragMode='obj'; objStart={ox:hit.x,oy:hit.y,mx,my}; pushUndo(); }
@@ -948,11 +1094,12 @@ window.addEventListener('mousemove', e=>{
   if(!dragMode) return;
   const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
   if(dragMode==='pan'){ cam.x=panStart.cx-(mx-panStart.mx)/cam.zoom; cam.y=panStart.cy-(my-panStart.my)/cam.zoom; markDirty(); renderMinimap(); }
-  else if(dragMode==='paint'){ paintAt(s2wX(mx),s2wY(my)); }
+  else if(dragMode==='paint'){ brushStroke(s2wX(mx),s2wY(my)); }
   else if(dragMode==='obj'){ const o=obj(state.selObj); if(o){ o.x=Math.round(objStart.ox+(mx-objStart.mx)/cam.zoom); o.y=Math.round(objStart.oy+(my-objStart.my)/cam.zoom); markDirty(); updateStatus(); renderMinimap(); } }
 });
-window.addEventListener('mouseup', ()=>{ if(dragMode==='paint'||dragMode==='obj') renderMinimap(); dragMode=null; stage.dataset.mode=state.mode; });
-cv.addEventListener('mousemove', e=>{ const r=cv.getBoundingClientRect(); updateStatus(s2wX(e.clientX-r.left), s2wY(e.clientY-r.top)); });
+window.addEventListener('mouseup', ()=>{ if(dragMode==='paint'||dragMode==='obj') renderMinimap(); if(dragMode==='paint') lastPaint=null; dragMode=null; stage.dataset.mode=state.mode; });
+cv.addEventListener('mousemove', e=>{ const r=cv.getBoundingClientRect(); const wx=s2wX(e.clientX-r.left), wy=s2wY(e.clientY-r.top); updateStatus(wx,wy); if(state.mode==='paint'){ brushWX=wx; brushWY=wy; markDirty(); } });
+cv.addEventListener('mouseleave', ()=>{ if(brushWX!=null){ brushWX=brushWY=null; markDirty(); } });
 
 function paintAt(wx,wy){
   const m=state.map, c=Math.floor(wx/TILE), r=Math.floor(wy/TILE);
@@ -974,8 +1121,10 @@ cv.addEventListener('drop', e=>{
   const r=cv.getBoundingClientRect(), wx=s2wX(e.clientX-r.left), wy=s2wY(e.clientY-r.top);
   const info=state.files.get(key); if(!info) return;
   if(info.kind==='tex'){
-    const m=state.map, c=Math.floor(wx/TILE), rr=Math.floor(wy/TILE);
-    if(c>=0&&rr>=0&&c<m.gridW&&rr<m.gridH){ pushUndo(); m.terrain[rr][c]=key; markDirty(); renderMinimap(); }
+    let L=state.map.terrainLayers.find(x=>x.texKey===key);
+    if(!L){ L=addTerrLayer(key); } else { state.map.activeTerr=L.id; renderTerrList(); }
+    if(L){ pushTerrUndo(L); lastPaint=null; brushStamp(wx,wy); terrDirty=true; markDirty(); renderMinimap();
+      if(state.mode!=='paint') setMode('paint'); }
     return;
   }
   placeObject(key, wx, wy);
@@ -1155,11 +1304,26 @@ function setMode(m){
   state.mode=m; stage.dataset.mode=m;
   $('btnModePaint').dataset.active = m==='paint'?'1':'0';
   $('btnModePlace').dataset.active = m==='place'?'1':'0';
-  if(m==='paint') deselect();
-  setModeHint(); renderTree($('search').value); updateStatus();
+  const paint = m==='paint';
+  $('brushBar').style.display = paint?'flex':'none';
+  $('terrHead').style.display = paint?'flex':'none';
+  $('terrList').style.display = paint?'block':'none';
+  $('objHead').style.display  = paint?'none':'flex';
+  $('objList').style.display  = paint?'none':'block';
+  if(paint){ deselect(); renderTerrList(); } else { brushWX=brushWY=null; }
+  setModeHint(); renderTree($('search').value); updateStatus(); markDirty();
 }
 $('btnModePaint').onclick=()=>setMode('paint');
 $('btnModePlace').onclick=()=>setMode('place');
+// ---- barra de pincel ----
+$('bbBrush').onclick =()=>{ brush.tool='brush';  $('bbBrush').dataset.active='1'; $('bbEraser').dataset.active='0'; markDirty(); };
+$('bbEraser').onclick=()=>{ brush.tool='eraser'; $('bbEraser').dataset.active='1'; $('bbBrush').dataset.active='0'; markDirty(); };
+$('bbSize').oninput=e=>{ brush.size=+e.target.value; $('bbSizeV').textContent=e.target.value; markDirty(); };
+$('bbSoft').oninput=e=>{ brush.soft=e.target.value/100; $('bbSoftV').textContent=e.target.value+'%'; markDirty(); };
+$('bbFlow').oninput=e=>{ brush.flow=Math.max(0.04,e.target.value/100); $('bbFlowV').textContent=e.target.value+'%'; };
+$('btnAddTerr').onclick=()=>addTerrLayer(state.paintTexture);
+$('bbFill').onclick=()=>{ const L=activeTerrLayer(); if(!L){ toast(t('t_needLayer'),true); return; } pushTerrUndo(L); const mc=L._mask.getContext('2d'); mc.save(); mc.globalCompositeOperation='source-over'; mc.globalAlpha=1; mc.fillStyle='#fff'; mc.fillRect(0,0,L._mask.width,L._mask.height); mc.restore(); renderTerrLayer(L); compositeTerrain(); markDirty(); renderMinimap(); };
+$('bbClear').onclick=()=>{ const L=activeTerrLayer(); if(!L){ toast(t('t_needLayer'),true); return; } pushTerrUndo(L); L._mask.getContext('2d').clearRect(0,0,L._mask.width,L._mask.height); renderTerrLayer(L); compositeTerrain(); markDirty(); renderMinimap(); };
 function flipSel(axis){ const o=obj(state.selObj); if(!o) return; pushUndo(); if(axis==='h') o.flipH=!o.flipH; else o.flipV=!o.flipV; markDirty(); renderMinimap(); }
 $('btnFlipH').onclick=()=>flipSel('h');
 $('btnFlipV').onclick=()=>flipSel('v');
@@ -1172,8 +1336,12 @@ function restore(s){ const d=JSON.parse(s);
   if(!obj(state.selObj)) deselect();
   renderObjList(); markDirty(); renderMinimap(); }
 function pushUndo(){ state.undo.push(snapshot()); if(state.undo.length>80) state.undo.shift(); state.redo.length=0; }
-$('btnUndo').onclick=()=>{ if(!state.undo.length)return; state.redo.push(snapshot()); restore(state.undo.pop()); };
-$('btnRedo').onclick=()=>{ if(!state.redo.length)return; state.undo.push(snapshot()); restore(state.redo.pop()); };
+$('btnUndo').onclick=()=>{ if(!state.undo.length)return; const e=state.undo.pop();
+  if(typeof e==='string'){ state.redo.push(snapshot()); restore(e); }
+  else if(e&&e.kind==='terr'){ const L=state.map.terrainLayers.find(x=>x.id===e.layerId); if(L){ state.redo.push(terrUndoEntry(L)); loadMaskDataURL(L,e.before); } } };
+$('btnRedo').onclick=()=>{ if(!state.redo.length)return; const e=state.redo.pop();
+  if(typeof e==='string'){ state.undo.push(snapshot()); restore(e); }
+  else if(e&&e.kind==='terr'){ const L=state.map.terrainLayers.find(x=>x.id===e.layerId); if(L){ state.undo.push(terrUndoEntry(L)); loadMaskDataURL(L,e.before); } } };
 $('btnCopy').onclick=()=>{ const o=obj(state.selObj); if(o){ state.clipboard={...o}; toast(t('t_copied')); } };
 $('btnCut').onclick =()=>{ const o=obj(state.selObj); if(o){ state.clipboard={...o}; deleteObject(o.id); toast(t('t_cut')); } };
 $('btnPaste').onclick=()=>{ if(!state.clipboard)return; pushUndo();
@@ -1189,8 +1357,9 @@ $('btnNew').onclick=()=>{
   cam.x=-200; cam.y=-120; cam.zoom=0.5; renderObjList(); markDirty(); renderMinimap(); toast(t('t_newMap',{w:gw,h:gh}));
 };
 $('btnSave').onclick=()=>{
-  const data={ format:'lionheart-map', version:2, tileSize:TILE, gridW:state.map.gridW, gridH:state.map.gridH,
-    terrain:state.map.terrain,
+  const data={ format:'lionheart-map', version:3, tileSize:TILE, gridW:state.map.gridW, gridH:state.map.gridH,
+    terrainLayers:state.map.terrainLayers.map(L=>({ id:L.id, texKey:L.texKey, name:L.name, opacity:(L.opacity==null?1:L.opacity), visible:L.visible!==false, mask:L._mask.toDataURL() })),
+    activeTerr:state.map.activeTerr, nextTerrId:state.map.nextTerrId,
     objects:state.map.objects.map(o=>({path:o.path,x:o.x,y:o.y,w:o.w,h:o.h,visible:o.visible!==false,groupId:o.groupId??null,flipH:!!o.flipH,flipV:!!o.flipV})),
     groups:state.map.groups.map(g=>({id:g.id,name:g.name,collapsed:!!g.collapsed,visible:g.visible!==false})),
     nextGroupId:state.map.nextGroupId };
@@ -1210,11 +1379,26 @@ function loadMap(d){
   let missing=0;
   const resolve=p=>{ if(p==null)return null; if(state.files.has(p))return p;
     const target=norm(p); for(const k of state.files.keys()) if(norm(k)===target) return k; missing++; return p; };
-  for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){ m.terrain[r][c]=resolve((d.terrain[r]||[])[c]??null); }
+  if(d.terrain) for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){ m.terrain[r][c]=resolve((d.terrain[r]||[])[c]??null); }
   let id=1; for(const o of (d.objects||[])){ m.objects.push({id:id++,path:resolve(o.path),x:o.x,y:o.y,w:o.w||128,h:o.h||128,visible:o.visible!==false,groupId:o.groupId??null,flipH:!!o.flipH,flipV:!!o.flipV}); }
   m.groups=(d.groups||[]).map(g=>({id:g.id,name:g.name||'Carpeta',collapsed:!!g.collapsed,visible:g.visible!==false}));
   m.nextGroupId=d.nextGroupId||(m.groups.reduce((mx,g)=>Math.max(mx,g.id),0)+1);
   m.nextId=id; state.map=m; state.undo.length=0; state.redo.length=0; deselect();
+  // ---- capas de terreno ----
+  m.terrainLayers=[]; m.nextTerrId=d.nextTerrId||1; m.activeTerr=d.activeTerr??null;
+  if(d.terrainLayers && d.terrainLayers.length){
+    let pending=d.terrainLayers.length;
+    const done=()=>{ if(--pending<=0){ compositeTerrain(); markDirty(); renderMinimap(); renderTerrList(); } };
+    for(const sl of d.terrainLayers){
+      const L={ id:sl.id, texKey:resolve(sl.texKey), name:sl.name||texLabel(sl.texKey), opacity:(sl.opacity==null?1:sl.opacity), visible:sl.visible!==false, _mask:makeMaskCanvas(), _rendered:makeMaskCanvas() };
+      m.terrainLayers.push(L);
+      if(sl.mask){ const img=new Image(); img.onload=()=>{ L._mask.getContext('2d').drawImage(img,0,0,L._mask.width,L._mask.height); renderTerrLayer(L); done(); }; img.onerror=done; img.src=sl.mask; }
+      else { renderTerrLayer(L); done(); }
+    }
+  } else if(d.terrain){ gridToLayers(m, d.terrain, resolve); rebuildAllTerr(); }
+  if(m.activeTerr==null && m.terrainLayers.length) m.activeTerr=m.terrainLayers[m.terrainLayers.length-1].id;
+  if(m.nextTerrId<=1) m.nextTerrId=m.terrainLayers.reduce((mx,L)=>Math.max(mx,L.id),0)+1;
+  renderTerrList();
   $('empty').style.display='none'; renderObjList(); markDirty(); renderMinimap();
   toast(missing? t('t_mapLoadedMiss',{n:missing}) : t('t_mapLoaded'), missing>0);
 }
@@ -1294,6 +1478,9 @@ function importZax(text){
 
   state.map=map; state.undo.length=0; state.redo.length=0; deselect();
   state.paintTexture = palKeys[1] ?? palKeys[0] ?? null;
+  map.terrainLayers=[]; map.nextTerrId=1; gridToLayers(map, map.terrain, k=>k);
+  map.activeTerr = map.terrainLayers.length ? map.terrainLayers[map.terrainLayers.length-1].id : null;
+  rebuildAllTerr(); renderTerrList();
   $('empty').style.display='none';
   fitView();
   renderObjList(); markDirty(); renderMinimap();
@@ -1332,15 +1519,18 @@ $('btnExport').onclick=async ()=>{
   if(Math.max(W,H)>16384 || W*H>1.2e8){ if(!confirm(t('c_bigExport',{w:W,h:H}))) return; }
   toast(t('t_prepExport'));
   const keys=new Set();
-  for(const row of m.terrain) for(const k of row) if(k) keys.add(k);
+  for(const L of m.terrainLayers) if(L.texKey) keys.add(L.texKey);
   for(const o of m.objects) keys.add(o.path);
   await ensureLoaded([...keys]);
   const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
-  // terrain: smoothing OFF + 1px overlap => no grid/seams
-  x.imageSmoothingEnabled=false;
-  for(let r=0;r<m.gridH;r++) for(let col=0;col<m.gridW;col++){
-    const k=m.terrain[r][col]; if(!k) continue;
-    const img=state.imgCache.get(k); if(img) x.drawImage(img, col*TILE, r*TILE, TILE+1, TILE+1);
+  // terreno: mezcla de capas a resolución completa (texturas nítidas, máscaras suaves)
+  x.imageSmoothingEnabled=true;
+  for(const L of m.terrainLayers){ if(L.visible===false) continue;
+    const lc=document.createElement('canvas'); lc.width=W; lc.height=H; const lx=lc.getContext('2d');
+    const tex=state.imgCache.get(L.texKey);
+    if(tex){ const pat=lx.createPattern(tex,'repeat'); lx.fillStyle=pat; lx.fillRect(0,0,W,H); } else { lx.fillStyle='#39414f'; lx.fillRect(0,0,W,H); }
+    lx.globalCompositeOperation='destination-in'; lx.imageSmoothingEnabled=true; lx.drawImage(L._mask,0,0,W,H); lx.globalCompositeOperation='source-over';
+    x.globalAlpha=(L.opacity==null?1:L.opacity); x.drawImage(lc,0,0); x.globalAlpha=1;
   }
   // objects: smoothing ON
   x.imageSmoothingEnabled=true;
@@ -1373,6 +1563,11 @@ window.addEventListener('keydown', e=>{
   if(ctrl&&e.key.toLowerCase()==='x'){ e.preventDefault(); $('btnCut').click(); return; }
   if(ctrl&&e.key.toLowerCase()==='v'){ e.preventDefault(); $('btnPaste').click(); return; }
   if(ctrl&&e.key.toLowerCase()==='s'){ e.preventDefault(); $('btnSave').click(); return; }
+  if(state.mode==='paint'){
+    if(e.key==='['||e.key===']'){ const f=e.key===']'?1.15:1/1.15; brush.size=Math.max(8,Math.min(420,Math.round(brush.size*f))); $('bbSize').value=brush.size; $('bbSizeV').textContent=brush.size; markDirty(); e.preventDefault(); return; }
+    if(e.key==='b'||e.key==='B'){ $('bbBrush').onclick(); e.preventDefault(); return; }
+    if(e.key==='e'||e.key==='E'){ $('bbEraser').onclick(); e.preventDefault(); return; }
+  }
   const o=obj(state.selObj);
   if(o){
     const step=e.shiftKey?1:8; let mv=false;
