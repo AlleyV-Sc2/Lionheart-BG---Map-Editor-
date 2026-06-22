@@ -221,8 +221,8 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
     <!-- Herramientas MDL16 -->
     <div class="tb-group">
       <button class="tb-btn icon" id="btnShiftTool" title="Ajustador Shift MDL16">🎯</button>
-      <button class="tb-btn icon" id="btnExtractTool" title="Extractor de capas MDL16">📦</button>
-      <button class="tb-btn icon" id="btnConvertTool" title="Conversor MDL16 → PNG">🏞️</button>
+      <button class="tb-btn icon" id="btnExtractTool" title="Extractor / Conversor MDL16 → PNG (multicapa)">📦</button>
+      <button class="tb-btn icon" id="btnRecolorTool" title="Recolorear imágenes y guardar">🎨</button>
     </div>
     <div class="spacer"></div>
     <div class="hint" id="modeHint"></div>
@@ -1641,16 +1641,36 @@ const MDL = {
     if(row.some(p=>p!==null)) rows.push(row);
     return rows;
   },
-  // Devuelve {frames:[{width,height,rows}]}
+  // Decodifica EXACTAMENTE nrows filas (la altura viene del header → robusto, no depende de marcadores)
+  decodeByHeight(d,start,width,nrows){
+    const rows=[]; let row=new Array(width).fill(null), x=0, pos=start;
+    const flush=()=>{rows.push(row);row=new Array(width).fill(null);x=0;};
+    while(pos<d.length && rows.length<nrows){
+      const ctrl=d[pos++];
+      if(ctrl&0x80){ const n=ctrl&0x7F; for(let i=0;i<n;i++){x++;if(x>=width){flush();if(rows.length>=nrows)break;}} }
+      else if(ctrl&0x40){ const c=ctrl&0x3F; for(let i=0;i<c;i++){ if(pos+1>=d.length)break; row[x]=d[pos]|(d[pos+1]<<8); pos+=2;x++; if(x>=width){flush();if(rows.length>=nrows)break;} } }
+      else{ const c=ctrl&0x3F; if(pos+1<d.length){ const v=d[pos]|(d[pos+1]<<8); pos+=2; for(let i=0;i<c;i++){row[x]=v;x++;if(x>=width){flush();if(rows.length>=nrows)break;}} } }
+    }
+    while(rows.length<nrows) rows.push(new Array(width).fill(null));
+    return rows;
+  },
+  // Devuelve {frames:[{width,height,rows,opaque}]} — decodifica cada frame por su ALTURA del header
   decodeAll(d){
     const frames=this.findFrames(d);
     return frames.map(f=>{
-      const end=this.nextMarker(d,f.dataStart);
-      const rows=this.decodeRLE(d,f.dataStart,end,f.width);
+      const rows=this.decodeByHeight(d,f.dataStart,f.width,f.height);
       let opaque=0;
       for(const r of rows) for(const p of r) if(p!==null&&p!==0xFFFF) opaque++;
       return {width:f.width,height:f.height,rows,opaque};
     });
+  },
+  // Elige el frame con MÁS contenido opaco (la imagen principal; en muchos modelos
+  // el frame 0 es una máscara casi vacía y la imagen real está más adelante)
+  mainFrame(frames){
+    if(!frames.length) return null;
+    let best=frames[0],bi=0;
+    frames.forEach((f,i)=>{ if(f.opaque>best.opaque){best=f;bi=i;} });
+    return {frame:best,index:bi};
   },
   // Renderiza filas a canvas con shift opcional y autocrop
   toCanvas(rows,width,shift=0,autocrop=false){
@@ -1677,8 +1697,266 @@ const MDL = {
       }
     }
     return cv;
+  },
+  // Shift automático: encuentra el desplazamiento que minimiza la opacidad en los
+  // bordes (empuja el contenido hacia el centro y la banda transparente al borde).
+  // Optimización global directa — sin umbrales ni heurísticas frágiles.
+  autoShift(rows,width,margin=12){
+    if(width<=2*margin) return 0;
+    const col=new Array(width).fill(0);
+    for(const row of rows) for(let x=0;x<width;x++){ const v=row[x]; if(v!==null&&v!==0xFFFF) col[x]++; }
+    let total=0; for(const c of col) total+=c;
+    if(total===0) return 0;
+    // Suma de ventana circular en O(1) con prefijos sobre el array duplicado
+    const pref=new Array(2*width+1).fill(0);
+    for(let i=0;i<2*width;i++) pref[i+1]=pref[i]+col[i%width];
+    let bestS=0,bestVal=Infinity;
+    for(let S=0;S<width;S++){
+      const seam=(width-S)%width;                 // columna que cae en el borde x=0
+      const start=((seam-margin)%width+width)%width;
+      const val=pref[start+2*margin]-pref[start];  // opacidad en las 2*margin columnas del borde
+      if(val<bestVal){ bestVal=val; bestS=S; }
+    }
+    return bestS;
+  },
+  // Cierra costuras finas: rellena píxeles transparentes con vecinos opacos a ambos
+  // lados (H, V o diagonal) hasta 'maxgap' px. No toca la silueta exterior.
+  crackFill(canvas, maxgap=3, passes=2){
+    const W=canvas.width, H=canvas.height, ctx=canvas.getContext('2d');
+    const img=ctx.getImageData(0,0,W,H), d=img.data;
+    const A=(x,y)=>d[(y*W+x)*4+3]>0;
+    const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+    for(let p=0;p<passes;p++){
+      const fills=[];
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+        if(A(x,y))continue;
+        for(const [dx,dy] of dirs){
+          let p1=null,p2=null;
+          for(let k=1;k<=maxgap;k++){ const xx=x+dx*k,yy=y+dy*k; if(xx<0||yy<0||xx>=W||yy>=H)break; if(A(xx,yy)){p1=[xx,yy];break;} }
+          for(let k=1;k<=maxgap;k++){ const xx=x-dx*k,yy=y-dy*k; if(xx<0||yy<0||xx>=W||yy>=H)break; if(A(xx,yy)){p2=[xx,yy];break;} }
+          if(p1&&p2){ const i1=(p1[1]*W+p1[0])*4, i2=(p2[1]*W+p2[0])*4;
+            fills.push([x,y,(d[i1]+d[i2])>>1,(d[i1+1]+d[i2+1])>>1,(d[i1+2]+d[i2+2])>>1]); break; }
+        }
+      }
+      for(const [x,y,r,g,b] of fills){ const i=(y*W+x)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255; }
+    }
+    ctx.putImageData(img,0,0);
+    return canvas;
+  },
+  // Recorta filas-borde espurias (densas y oscuras tras estrecharse el dibujo)
+  trimEdgeRows(rows){
+    const stat=row=>{ let op=0,dk=0; for(const v of row){ if(v!==null&&v!==0xFFFF){op++; if(((v>>11)&31)<4&&((v>>5)&63)<8&&(v&31)<4)dk++;} } return [op,dk]; };
+    let r=rows.slice();
+    while(r.length>=3){ const a=stat(r[r.length-1]),b=stat(r[r.length-2]); if(a[0]>10&&a[0]>b[0]*2&&a[1]>a[0]*0.5) r.pop(); else break; }
+    while(r.length>=3){ const a=stat(r[0]),b=stat(r[1]); if(a[0]>10&&a[0]>b[0]*2&&a[1]>a[0]*0.5) r.shift(); else break; }
+    return r;
+  },
+  // Detecta capas SIN cabecera: tabla de offsets de filas (u32 monótonos, último
+  // valor = tamaño RLE razonable) seguida de los datos. Es como se guardan las
+  // capas de relleno (tienda) y exteriores (casa).
+  findHeaderlessLayers(d){
+    const out=[]; let i=0;
+    while(i<d.length-8){
+      let pos=i,prev=-1,n=0;
+      while(pos+4<=d.length){
+        const v=d[pos]|(d[pos+1]<<8)|(d[pos+2]<<16)|(d[pos+3]<<24);
+        if(v<prev||v>1000000) break;
+        prev=v; pos+=4; n++;
+      }
+      if(n>=30 && prev>=200 && prev<=200000 && pos+prev<=d.length){
+        out.push({dataStart:pos, byteSize:prev, rows:n});
+        i=pos+prev;
+      } else i++;
+    }
+    return out;
+  },
+  _grid(rows,W,shift){ const H=rows.length,g=[]; for(let y=0;y<H;y++){ const r=new Uint8Array(W); for(let x=0;x<W;x++){ const v=rows[y][x]; if(v!==null&&v!==0xFFFF) r[(x+shift)%W]=1; } g.push(r);} return g; },
+  _holes(g,W){ const H=g.length, out=g.map(r=>new Uint8Array(r)); const st=[]; const push=(x,y)=>{ if(x>=0&&x<W&&y>=0&&y<H&&!out[y][x]){ out[y][x]=1; st.push(x,y);} };
+    for(let x=0;x<W;x++){push(x,0);push(x,H-1);} for(let y=0;y<H;y++){push(0,y);push(W-1,y);}
+    while(st.length){ const y=st.pop(),x=st.pop(); push(x+1,y);push(x-1,y);push(x,y+1);push(x,y-1); }
+    const holes=[]; for(let y=0;y<H;y++)for(let x=0;x<W;x++) if(!g[y][x]&&!out[y][x]) holes.push(x,y); return holes; },
+  // Registra la capa L sobre la base B (ambas como sets de filas) y decide orden.
+  // Devuelve {shift,dy,behind,score}. Maximiza relleno de huecos + solape.
+  _register(baseRows,baseShift,W,Lrows){
+    // construir grid de base con su shift
+    const B=this._grid(baseRows,W,baseShift);
+    let Bholes=this._holes(B,W); const Hb=B.length;
+    // ACOTAR coste: si hay demasiados huecos, muestrear (evita cuelgues)
+    const MAXH=4000;
+    if(Bholes.length/2>MAXH){ const step=Math.ceil((Bholes.length/2)/MAXH)*2; const s=[]; for(let k=0;k<Bholes.length;k+=step){ s.push(Bholes[k],Bholes[k+1]); } Bholes=s; }
+    // set de opacos de L en coords originales
+    const HL=Lrows.length;
+    let best={score:-1,shift:0,dy:0,behind:true,fillB:0};
+    for(let sL=0;sL<W;sL+=1){
+      for(let dy=-12;dy<=12;dy++){
+        let fillB=0;
+        for(let k=0;k<Bholes.length;k+=2){ const hx=Bholes[k],hy=Bholes[k+1]; const ox=((hx-sL)%W+W)%W, oy=hy-dy; if(oy>=0&&oy<HL){ const v=Lrows[oy][ox]; if(v!==null&&v!==0xFFFF) fillB++; } }
+        if(fillB>best.score){ best={score:fillB,shift:sL,dy,fillB}; }
+      }
+    }
+    // En el mejor alineamiento, ¿llena B los huecos de L? (para decidir orden)
+    const sL=best.shift, dy=best.dy;
+    const Lg=this._grid(Lrows,W,sL); const Lholes=this._holes(Lg,W);
+    let fillL=0; for(let k=0;k<Lholes.length;k+=2){ const hx=Lholes[k],hy=Lholes[k+1]+dy; if(hy>=0&&hy<Hb){ if(B[hy][hx]) fillL++; } }
+    best.behind = (best.fillB>=fillL);
+    return best;
+  },
+  // ¿Estas filas parecen una imagen real (no una máscara casi vacía ni geometría
+  // que decodifica como rayas)? Coherencia vertical: en imágenes reales los píxeles
+  // opacos suelen tener opaco encima; la geometría en rayas no.
+  looksLikeImage(rows,W){
+    let op=0,coh=0;
+    for(let y=1;y<rows.length;y++)for(let x=0;x<W;x++){
+      const v=rows[y][x]; if(v===null||v===0xFFFF) continue; op++;
+      const u=rows[y-1][x]; if(u!==null&&u!==0xFFFF) coh++;
+    }
+    if(op<60) return false;                  // máscara/vacía
+    const ratio=op/(W*Math.max(1,rows.length));
+    if(ratio>0.93) return false;             // bloque sólido → probable geometría
+    return (coh/op) > 0.42;                   // coherencia vertical típica de imágenes
+  },
+  // Compone la imagen COMPLETA de un MDL16 (multicapa). Devuelve canvas o null.
+  composeComplete(d, opts){
+    opts=opts||{};
+    const frames=this.decodeAll(d);
+    if(!frames.length) return null;
+    const main=this.mainFrame(frames); const W=main.frame.width;
+    let layers=[];
+    for(const f of frames){ if(f.width===W && f.opaque>50) layers.push({rows:f.rows,opaque:f.opaque,kind:'frame'}); }
+    if(opts.multilayer){
+      for(const L of this.findHeaderlessLayers(d)){
+        const rows=this.decodeRLE(d,L.dataStart,L.dataStart+L.byteSize,W);
+        let op=0; for(const r of rows)for(const p of r) if(p!==null&&p!==0xFFFF)op++;
+        // descartar ruido (geometría): capas con relleno extremo o casi nulo
+        const ratio=op/(W*Math.max(1,rows.length));
+        if(op>80 && ratio<0.85) layers.push({rows:this.trimEdgeRows(rows),opaque:op,kind:'headerless'});
+      }
+    }
+    if(!layers.length) return null;
+    // base = más densa
+    let base=layers[0],bi=0; layers.forEach((l,i)=>{ if(l.opaque>base.opaque){base=l;bi=i;} });
+    base.rows=this.trimEdgeRows(base.rows);
+    const sBase=this.autoShift(base.rows,W);
+    const Hbase=base.rows.length;
+
+    // registrar y clasificar las demás capas
+    const behind=[], front=[];
+    if(opts.multilayer){
+      layers.forEach((L,i)=>{ if(i===bi) return;
+        const reg=this._register(base.rows,sBase,W,L.rows);
+        if(reg.score<30) return; // no aporta lo suficiente
+        const entry={rows:L.rows,shift:reg.shift,dy:reg.dy};
+        if(reg.behind) behind.push(entry); else front.push(entry);
+      });
+    }
+
+    // pintar: behind (abajo) → base → front (arriba)
+    const H=Hbase+10;
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d'); const img=ctx.createImageData(W,H); const data=img.data;
+    const paint=(rows,shift,dy)=>{ for(let y=0;y<rows.length;y++){ const ty=y+dy; if(ty<0||ty>=H)continue; for(let x=0;x<W;x++){ const v=rows[y][x]; if(v===null||v===0xFFFF)continue; const nx=(x+shift)%W, idx=(ty*W+nx)*4; data[idx]=((v>>11)&31)*255/31|0; data[idx+1]=((v>>5)&63)*255/63|0; data[idx+2]=(v&31)*255/31|0; data[idx+3]=255; } } };
+    for(const e of behind) paint(e.rows,e.shift,e.dy);
+    paint(base.rows,sBase,0);
+    for(const e of front) paint(e.rows,e.shift,e.dy);
+    ctx.putImageData(img,0,0);
+    return cv;
   }
 };
+
+// ============ GUARDADO A DISCO (File System Access API + fallback descarga) ============
+const Disk = {
+  dirHandle:null,
+  supported(){ return 'showSaveFilePicker' in window || 'showDirectoryPicker' in window; },
+  async pickDir(){
+    if(!('showDirectoryPicker' in window)) return null;
+    try{ this.dirHandle=await window.showDirectoryPicker({mode:'readwrite'}); return this.dirHandle; }
+    catch(e){ return null; }
+  },
+  // Guarda un blob en una ruta relativa (crea subcarpetas) dentro del dir elegido,
+  // o cae a descarga si no hay API/dir.
+  async saveBlob(blob, relPath){
+    if(this.dirHandle){
+      const parts=relPath.split('/').filter(Boolean);
+      const name=parts.pop();
+      let dir=this.dirHandle;
+      for(const p of parts){ dir=await dir.getDirectoryHandle(p,{create:true}); }
+      const fh=await dir.getFileHandle(name,{create:true});
+      const w=await fh.createWritable(); await w.write(blob); await w.close();
+      return true;
+    }
+    // fallback: descarga directa
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=relPath.split('/').pop(); a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    return false;
+  },
+  // Guarda un canvas como PNG a disco/descarga
+  async saveCanvas(canvas, relPath){
+    const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+    return this.saveBlob(blob, relPath);
+  }
+};
+
+// --- Guardado en disco (File System Access API, con fallback a descarga) ---
+async function saveBlobToDisk(blob, suggestedName){
+  if(window.showSaveFilePicker){
+    try{
+      const ext=suggestedName.split('.').pop();
+      const handle=await window.showSaveFilePicker({suggestedName, types:[{description:'Imagen',accept:{['image/'+(ext==='png'?'png':'*')]:['.'+ext]}}]});
+      const w=await handle.createWritable(); await w.write(blob); await w.close();
+      return true;
+    }catch(e){ if(e.name==='AbortError') return false; }
+  }
+  // fallback: descarga normal
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=suggestedName; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  return true;
+}
+// Guardar varios archivos en una CARPETA elegida (o ZIP de fallback)
+async function saveManyToDisk(items, zipName){ // items: [{path, blob}]
+  if(window.showDirectoryPicker){
+    try{
+      const dir=await window.showDirectoryPicker();
+      for(const it of items){
+        const parts=it.path.split('/').filter(Boolean);
+        let cur=dir;
+        for(let i=0;i<parts.length-1;i++) cur=await cur.getDirectoryHandle(parts[i],{create:true});
+        const fh=await cur.getFileHandle(parts[parts.length-1],{create:true});
+        const w=await fh.createWritable(); await w.write(it.blob); await w.close();
+      }
+      return 'folder';
+    }catch(e){ if(e.name==='AbortError') return 'cancel'; }
+  }
+  // fallback ZIP
+  const zip=new JSZip(); for(const it of items) zip.file(it.path,it.blob);
+  const blob=await zip.generateAsync({type:'blob'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=zipName; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  return 'zip';
+}
+// Recolorea un canvas: hue (-180..180), sat (0..2), light (-100..100), tinte rgb opcional
+function recolorCanvas(srcCanvas, {hue=0,sat=1,light=0,tintR=null,tintG=null,tintB=null,tintAmt=0}={}){
+  const W=srcCanvas.width,H=srcCanvas.height;
+  const out=document.createElement('canvas'); out.width=W; out.height=H;
+  const ctx=out.getContext('2d'); ctx.drawImage(srcCanvas,0,0);
+  const img=ctx.getImageData(0,0,W,H), d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    if(d[i+3]===0) continue;
+    let r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
+    // RGB→HSL
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let h,s,l=(mx+mn)/2;
+    if(mx===mn){h=0;s=0;}else{const dd=mx-mn; s=l>0.5?dd/(2-mx-mn):dd/(mx+mn);
+      if(mx===r)h=(g-b)/dd+(g<b?6:0); else if(mx===g)h=(b-r)/dd+2; else h=(r-g)/dd+4; h/=6;}
+    h=(h*360+hue+360)%360/360; s=Math.max(0,Math.min(1,s*sat)); l=Math.max(0,Math.min(1,l+light/100));
+    // HSL→RGB
+    const hue2rgb=(p,q,t)=>{ if(t<0)t+=1; if(t>1)t-=1; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; };
+    let R,G,B; if(s===0){R=G=B=l;}else{const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q; R=hue2rgb(p,q,h+1/3);G=hue2rgb(p,q,h);B=hue2rgb(p,q,h-1/3);}
+    R*=255;G*=255;B*=255;
+    if(tintR!==null&&tintAmt>0){ R=R*(1-tintAmt)+tintR*tintAmt; G=G*(1-tintAmt)+tintG*tintAmt; B=B*(1-tintAmt)+tintB*tintAmt; }
+    d[i]=R|0; d[i+1]=G|0; d[i+2]=B|0;
+  }
+  ctx.putImageData(img,0,0);
+  return out;
+}
 
 // --- Override storage (IndexedDB) ---
 let _odb=null;
@@ -1741,9 +2019,10 @@ $('btnShiftTool').onclick=()=>{
               <button class="tb-btn" style="padding:7px 10px" onclick="shiftAuto()">Auto</button>
             </div>
           </div>
-          <button class="dlbtn" style="width:100%;margin-top:14px" onclick="shiftSaveOverride()">💾 Guardar capa en Override</button>
-          <button class="dlbtn" style="width:100%;margin-top:8px;background:var(--green);color:#062b10" onclick="shiftSaveAll()">💾 Guardar TODAS las capas</button>
-          <p style="color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5">Se guarda como PNG en <code style="color:var(--gold)">Override/&lt;ruta&gt;</code> dentro del caché del navegador. Usa el botón de exportar del gestor para descargarlas.</p>
+          <button class="dlbtn" style="width:100%;margin-top:14px" onclick="shiftSaveDisk()">💾 Guardar capa a disco</button>
+          <button class="dlbtn" style="width:100%;margin-top:8px;background:var(--green);color:#062b10" onclick="shiftSaveDiskAll()">💾 Guardar TODAS las capas a disco</button>
+          <button class="dlbtn" style="width:100%;margin-top:8px;background:#3a4252;color:#fff" onclick="shiftSaveOverride()">📦 Guardar capa en Override (caché)</button>
+          <p style="color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5">«A disco» abre el diálogo de guardado del navegador (o tu carpeta si la API está disponible). «Override» lo guarda en el caché interno del editor.</p>
         </div>
       </div>
     </div>
@@ -1763,7 +2042,7 @@ function shiftLoad(file){
     const d=new Uint8Array(e.target.result);
     const frames=MDL.decodeAll(d);
     if(!frames.length){ toast('No se encontraron capas',true); return; }
-    _shiftState={frames,active:0,shifts:frames.map(()=>0),fileName:file.webkitRelativePath||file.name};
+    _shiftState={frames,active:0,shifts:frames.map(f=>MDL.autoShift(f.rows,f.width)),fileName:file.webkitRelativePath||file.name};
     $('shiftDrop').style.display='none';
     $('shiftWork').style.display='block';
     // Tabs de capas
@@ -1797,13 +2076,37 @@ function shiftRender(){
 function shiftUpdate(){ const i=_shiftState.active; _shiftState.shifts[i]=parseInt($('shiftRange').value); $('shiftNum').value=_shiftState.shifts[i]; shiftRender(); }
 function shiftSync(){ const i=_shiftState.active; _shiftState.shifts[i]=parseInt($('shiftNum').value)||0; $('shiftRange').value=_shiftState.shifts[i]; shiftRender(); }
 function shiftAuto(){
-  // Auto: busca la columna con menos píxeles opacos (mínima costura)
   const i=_shiftState.active, f=_shiftState.frames[i];
-  const col=new Array(f.width).fill(0);
-  for(const row of f.rows) for(let x=0;x<f.width;x++){ const v=row[x]; if(v!==null&&v!==0xFFFF) col[x]++; }
-  let minX=0,minV=Infinity; for(let x=0;x<f.width;x++) if(col[x]<minV){minV=col[x];minX=x;}
-  _shiftState.shifts[i]=(f.width-minX)%f.width;
+  _shiftState.shifts[i]=MDL.autoShift(f.rows,f.width);
   $('shiftRange').value=_shiftState.shifts[i]; $('shiftNum').value=_shiftState.shifts[i]; shiftRender();
+}
+
+// Nombre de archivo de la capa (capa 0 sin sufijo, las demás _L<n>)
+function shiftLayerName(i){
+  const noExt=_shiftState.fileName.replace(/\.mdl16$/i,'');
+  const base=noExt.split('/').pop();
+  return i===0?`${base}.png`:`${base}_L${i}.png`;
+}
+async function shiftSaveDisk(){
+  const i=_shiftState.active, f=_shiftState.frames[i];
+  const cv=MDL.toCanvas(f.rows,f.width,_shiftState.shifts[i],true);
+  if(Disk.supported() && 'showSaveFilePicker' in window){
+    try{ const fh=await window.showSaveFilePicker({suggestedName:shiftLayerName(i),types:[{description:'PNG',accept:{'image/png':['.png']}}]});
+      const blob=await new Promise(r=>cv.toBlob(r,'image/png')); const w=await fh.createWritable(); await w.write(blob); await w.close(); toast('✅ Guardada a disco'); return; }
+    catch(e){ if(e.name==='AbortError') return; }
+  }
+  const blob=await new Promise(r=>cv.toBlob(r,'image/png')); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=shiftLayerName(i); a.click(); toast('✅ Descargada');
+}
+async function shiftSaveDiskAll(){
+  let dir=null;
+  if('showDirectoryPicker' in window){ dir=await Disk.pickDir(); }
+  let n=0;
+  for(let i=0;i<_shiftState.frames.length;i++){
+    const f=_shiftState.frames[i]; if(f.opaque===0) continue;
+    const cv=MDL.toCanvas(f.rows,f.width,_shiftState.shifts[i],true);
+    await Disk.saveCanvas(cv, shiftLayerName(i)); n++;
+  }
+  toast(`✅ ${n} capas guardadas${dir?' en tu carpeta':' (descargas)'}`);
 }
 
 function overridePathFor(origPath,layer){
@@ -1836,98 +2139,185 @@ async function shiftSaveAll(){
   toast(`✅ ${n} capas guardadas en Override`);
 }
 
-// ============ EXTRACTOR DE CAPAS ============
+// ============ EXTRACTOR / CONVERSOR UNIFICADO ============
 $('btnExtractTool').onclick=()=>{
-  const body=mdlModal('📦 Extractor de Capas MDL16 → PNG',`
+  mdlModal('📦 Extractor / Conversor MDL16 → PNG',`
     <div id="extDrop" style="border:3px dashed var(--gold);padding:34px;text-align:center;border-radius:12px;cursor:pointer">
       <p style="font-size:1.1em">📂 Selecciona una carpeta con archivos <b>.mdl16</b></p>
-      <p style="color:var(--muted);font-size:.85em;margin-top:6px">Extrae TODAS las capas de cada archivo por separado</p>
+      <p style="color:var(--muted);font-size:.85em;margin-top:6px">Extrae <b>todas las capas</b> de cada modelo como PNG limpios e independientes</p>
       <input type="file" id="extFolder" webkitdirectory directory multiple style="display:none">
     </div>
-    <div id="extStatus" style="margin-top:14px;color:var(--muted);text-align:center"></div>
-    <button class="dlbtn" id="extGo" disabled style="width:100%;margin-top:14px;opacity:.5">Extraer todas las capas (ZIP)</button>
-    <div id="extLog" style="background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px;font-family:ui-monospace,monospace;font-size:11px;max-height:240px;overflow:auto;display:none"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;margin-top:14px">
+      <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extCrop" checked> Recortar al contenido</label>
+      <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extSkipMask" checked> Saltar máscaras / capas vacías</label>
+      <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extCrack"> Cerrar costuras (crack-fill)</label>
+      <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extCompose"> Componer imagen completa <span style="color:#e3a14b">(experimental)</span></label>
+    </div>
+    <p style="color:var(--muted);font-size:11px;margin:10px 0 0;line-height:1.5">Por defecto se extrae cada capa por separado (fiable). «Crack-fill» y «Componer» son para casos concretos: pueden alterar algunas imágenes, déjalos apagados para conversión en masa.</p>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="dlbtn" id="extDisk" disabled style="flex:1;opacity:.5">💾 Guardar a disco (carpeta)</button>
+      <button class="dlbtn" id="extZip" disabled style="flex:1;opacity:.5;background:#3a4252;color:#fff">📦 Descargar ZIP</button>
+    </div>
+    <div id="extStatus" style="margin-top:12px;color:var(--muted);text-align:center">Esperando carpeta…</div>
+    <div id="extLog" style="background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px;font-family:ui-monospace,monospace;font-size:11px;max-height:240px;overflow:auto;display:none"></div>
   `);
   let extFiles=[];
-  const drop=$('extDrop'), inp=$('extFolder'), go=$('extGo');
+  const drop=$('extDrop'), inp=$('extFolder'), bDisk=$('extDisk'), bZip=$('extZip');
   drop.onclick=()=>inp.click();
   inp.onchange=e=>{
     extFiles=Array.from(e.target.files).filter(f=>/\.mdl16$/i.test(f.name));
-    $('extStatus').textContent=extFiles.length?`✅ ${extFiles.length} archivos .mdl16 encontrados`:'❌ No hay .mdl16';
-    go.disabled=!extFiles.length; go.style.opacity=extFiles.length?'1':'.5';
+    $('extStatus').textContent=extFiles.length?`✅ ${extFiles.length} archivos .mdl16`:'❌ No hay .mdl16';
+    const on=extFiles.length>0;
+    bDisk.disabled=!on; bDisk.style.opacity=on?'1':'.5';
+    bZip.disabled=!on; bZip.style.opacity=on?'1':'.5';
+    if(!Disk.supported()){ bDisk.textContent='💾 Guardar a disco (descargas)'; }
   };
-  go.onclick=async()=>{
+
+  async function process(toDisk){
     const log=$('extLog'); log.style.display='block'; log.innerHTML='';
-    const zip=new JSZip(); let count=0;
-    for(const file of extFiles){
-      const d=new Uint8Array(await file.arrayBuffer());
-      const frames=MDL.decodeAll(d);
-      const rel=(file.webkitRelativePath||file.name).replace(/\.mdl16$/i,'');
-      let saved=0;
-      frames.forEach((f,i)=>{
-        if(f.opaque===0) return;
-        const cv=MDL.toCanvas(f.rows,f.width,0,true);
-        const name=i===0?`${rel}.png`:`${rel}_L${i}.png`;
-        zip.file(name,new Promise(res=>cv.toBlob(res)));
-        count++; saved++;
-      });
-      const line=document.createElement('div'); line.style.color='#5fbf6e';
-      line.textContent=`✓ ${file.name}: ${saved} capas`; log.appendChild(line); log.scrollTop=log.scrollHeight;
+    const crop=$('extCrop').checked, skipMask=$('extSkipMask').checked, crack=$('extCrack').checked, compose=$('extCompose').checked;
+    const logln=(t,c)=>{ const l=document.createElement('div'); if(c)l.style.color=c; l.textContent=t; log.appendChild(l); log.scrollTop=log.scrollHeight; };
+
+    let dirOk=false;
+    if(toDisk && Disk.supported() && 'showDirectoryPicker' in window){
+      dirOk=!!(await Disk.pickDir());
+      if(!dirOk) logln('⚠️ No se eligió carpeta; se descargará cada archivo.', '#e3c64b');
+      else logln('📂 Carpeta elegida. Guardando…', '#5fbf6e');
     }
-    const blob=await zip.generateAsync({type:'blob'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Capas_Extraidas.zip'; a.click();
-    const done=document.createElement('div'); done.style.color='#e8b54b'; done.textContent=`✅ ${count} PNG generados`; log.appendChild(done);
-  };
+    const zip=(!toDisk)?new JSZip():null;
+    let files=0, pngs=0, fail=0;
+    const saveCv=async(cv,rel)=>{ if(zip){ const b=await new Promise(r=>cv.toBlob(r,'image/png')); zip.file(rel,b); } else { await Disk.saveCanvas(cv,rel); } };
+
+    for(const file of extFiles){
+      try{
+        const d=new Uint8Array(await file.arrayBuffer());
+        const relBase=(file.webkitRelativePath||file.name).replace(/\.mdl16$/i,'');
+
+        if(compose){
+          // Modo experimental: una imagen compuesta por archivo
+          let cv=MDL.composeComplete(d,{multilayer:true});
+          if(!cv){ fail++; logln(`✗ ${file.name}: sin imagen`, '#d65a5a'); continue; }
+          if(crack) cv=MDL.crackFill(cv,3,2);
+          if(crop) cv=cropCanvas(cv);
+          await saveCv(cv, relBase+'.png'); pngs++; files++;
+        } else {
+          // Modo fiable: TODAS las capas limpias por separado
+          const frames=MDL.decodeAll(d);
+          // ordenar por densidad: la más densa es la principal (sin sufijo)
+          const idx=frames.map((f,i)=>i).filter(i=>frames[i].opaque>0);
+          idx.sort((a,b)=>frames[b].opaque-frames[a].opaque);
+          let exported=0;
+          for(const i of idx){
+            let rows=MDL.trimEdgeRows(frames[i].rows);
+            if(skipMask && !MDL.looksLikeImage(rows,frames[i].width)) continue;
+            const sh=MDL.autoShift(rows,frames[i].width);
+            let cv=MDL.toCanvas(rows,frames[i].width,sh,crop);
+            if(crack) cv=MDL.crackFill(cv,3,2);
+            const rel = exported===0 ? relBase+'.png' : `${relBase}_L${i}.png`;
+            await saveCv(cv, rel); exported++; pngs++;
+          }
+          if(exported===0){ fail++; logln(`✗ ${file.name}: sin capas válidas`, '#d65a5a'); }
+          else files++;
+        }
+        if(files%25===0) logln(`… ${files} archivos`, '#8b95a3');
+      }catch(err){ fail++; logln(`✗ ${file.name}: ${err.message}`, '#d65a5a'); }
+    }
+    if(zip){ const blob=await zip.generateAsync({type:'blob'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Lionheart_PNG.zip'; a.click(); }
+    logln(`✅ ${pngs} PNG de ${files} archivos${fail?` · ${fail} fallos`:''}${dirOk?' (en tu carpeta)':''}`, '#e8b54b');
+  }
+  bDisk.onclick=()=>process(true);
+  bZip.onclick=()=>process(false);
 };
 
-// ============ CONVERSOR PNG (con Auto-shift opcional) ============
-$('btnConvertTool').onclick=()=>{
-  const body=mdlModal('🏞️ Conversor MDL16 → PNG',`
-    <div id="cnvDrop" style="border:3px dashed var(--gold);padding:34px;text-align:center;border-radius:12px;cursor:pointer">
-      <p style="font-size:1.1em">📂 Selecciona una carpeta con archivos <b>.mdl16</b></p>
-      <p style="color:var(--muted);font-size:.85em;margin-top:6px">Convierte la capa principal de cada archivo a PNG</p>
-      <input type="file" id="cnvFolder" webkitdirectory directory multiple style="display:none">
+function cropCanvas(cv){
+  const ctx=cv.getContext('2d'), im=ctx.getImageData(0,0,cv.width,cv.height).data;
+  let mnx=cv.width,mxx=-1,mny=cv.height,mxy=-1;
+  for(let y=0;y<cv.height;y++)for(let x=0;x<cv.width;x++){ if(im[(y*cv.width+x)*4+3]>0){ if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y; } }
+  if(mxx<mnx) return cv;
+  const c2=document.createElement('canvas'); c2.width=mxx-mnx+1; c2.height=mxy-mny+1;
+  c2.getContext('2d').drawImage(cv,mnx,mny,c2.width,c2.height,0,0,c2.width,c2.height);
+  return c2;
+}
+
+// ============ RECOLOR (cambiar colores + guardar a disco) ============
+let _recolor={img:null,name:'imagen.png'};
+$('btnRecolorTool').onclick=()=>{
+  mdlModal('🎨 Recolorear imagen y guardar',`
+    <div id="rcDrop" style="border:3px dashed var(--gold);padding:30px;text-align:center;border-radius:12px;cursor:pointer">
+      <p style="font-size:1.05em">🖼️ Arrastra o haz clic — carga un <b>.png</b>, <b>.jpg</b> o un <b>.mdl16</b></p>
+      <input type="file" id="rcFile" accept=".png,.jpg,.jpeg,.webp,.mdl16" style="display:none">
     </div>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;color:#c8cfd8;font-size:13px;justify-content:center">
-      <input type="checkbox" id="cnvAuto" checked> Aplicar auto-shift (centrar imagen)
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;color:#c8cfd8;font-size:13px;justify-content:center">
-      <input type="checkbox" id="cnvCrop" checked> Recortar al contenido
-    </label>
-    <div id="cnvStatus" style="margin-top:14px;color:var(--muted);text-align:center"></div>
-    <button class="dlbtn" id="cnvGo" disabled style="width:100%;margin-top:14px;opacity:.5">Convertir a PNG (ZIP)</button>
-    <div id="cnvLog" style="background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px;font-family:ui-monospace,monospace;font-size:11px;max-height:240px;overflow:auto;display:none"></div>
+    <div id="rcWork" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:18px;margin-top:14px">
+        <div style="text-align:center;background:repeating-conic-gradient(#191d22 0 25%,#20252c 0 50%) 0/16px 16px;border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;max-height:460px">
+          <canvas id="rcCanvas" style="image-rendering:pixelated;max-width:100%"></canvas>
+        </div>
+        <div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:14px">
+          ${['Tono|hue|-180|180|0','Saturación|sat|0|300|100','Brillo|bri|0|300|100','Contraste|con|0|300|100'].map(s=>{const[l,id,mn,mx,vv]=s.split('|');return `<label style="display:block;font-size:12px;color:var(--muted);margin:8px 0 2px">${l}: <span id="rc_${id}_v">${vv}</span></label><input type="range" id="rc_${id}" min="${mn}" max="${mx}" value="${vv}" style="width:100%;accent-color:var(--gold)" oninput="rcUpdate()">`;}).join('')}
+          <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 2px">Tinte de color</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="color" id="rc_tint" value="#ffffff" oninput="rcUpdate()" style="width:46px;height:30px;border:none;background:none;cursor:pointer">
+            <input type="range" id="rc_tintamt" min="0" max="100" value="0" style="flex:1;accent-color:var(--gold)" oninput="rcUpdate()">
+            <span id="rc_tintamt_v" style="font-size:12px;color:var(--muted)">0%</span>
+          </div>
+          <button class="tb-btn" style="width:100%;margin-top:12px" onclick="rcReset()">↺ Restablecer</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="dlbtn" style="flex:1" onclick="rcSave()">💾 Guardar a disco</button>
+        <button class="dlbtn" style="flex:1;background:#3a4252;color:#fff" onclick="rcLoadAnother()">📂 Cargar otra</button>
+      </div>
+    </div>
   `);
-  let cnvFiles=[];
-  const drop=$('cnvDrop'), inp=$('cnvFolder'), go=$('cnvGo');
+  const drop=$('rcDrop'), inp=$('rcFile');
   drop.onclick=()=>inp.click();
-  inp.onchange=e=>{
-    cnvFiles=Array.from(e.target.files).filter(f=>/\.mdl16$/i.test(f.name));
-    $('cnvStatus').textContent=cnvFiles.length?`✅ ${cnvFiles.length} archivos .mdl16`:'❌ No hay .mdl16';
-    go.disabled=!cnvFiles.length; go.style.opacity=cnvFiles.length?'1':'.5';
-  };
-  go.onclick=async()=>{
-    const log=$('cnvLog'); log.style.display='block'; log.innerHTML='';
-    const auto=$('cnvAuto').checked, crop=$('cnvCrop').checked;
-    const zip=new JSZip(); let count=0;
-    for(const file of cnvFiles){
-      const d=new Uint8Array(await file.arrayBuffer());
-      const frames=MDL.decodeAll(d);
-      if(!frames.length||frames[0].opaque===0){ continue; }
-      const f=frames[0];
-      let shift=0;
-      if(auto){ const col=new Array(f.width).fill(0); for(const row of f.rows)for(let x=0;x<f.width;x++){const v=row[x];if(v!==null&&v!==0xFFFF)col[x]++;} let minX=0,minV=Infinity; for(let x=0;x<f.width;x++)if(col[x]<minV){minV=col[x];minX=x;} shift=(f.width-minX)%f.width; }
-      const cv=MDL.toCanvas(f.rows,f.width,shift,crop);
-      const rel=(file.webkitRelativePath||file.name).replace(/\.mdl16$/i,'.png');
-      zip.file(rel,new Promise(res=>cv.toBlob(res)));
-      count++;
-      if(count%50===0){ const l=document.createElement('div'); l.style.color='#8b95a3'; l.textContent=`… ${count} procesados`; log.appendChild(l); log.scrollTop=log.scrollHeight; }
-    }
-    const blob=await zip.generateAsync({type:'blob'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Convertidos_PNG.zip'; a.click();
-    const done=document.createElement('div'); done.style.color='#e8b54b'; done.textContent=`✅ ${count} PNG generados`; log.appendChild(done);
-  };
+  drop.ondragover=e=>{e.preventDefault();drop.style.background='rgba(232,181,75,.08)';};
+  drop.ondragleave=()=>drop.style.background='';
+  drop.ondrop=e=>{e.preventDefault();drop.style.background='';rcLoad(e.dataTransfer.files[0]);};
+  inp.onchange=e=>rcLoad(e.target.files[0]);
 };
+function rcLoad(file){
+  if(!file) return;
+  _recolor.name=file.name.replace(/\.(mdl16|jpg|jpeg|webp)$/i,'.png');
+  if(/\.mdl16$/i.test(file.name)){
+    const rd=new FileReader();
+    rd.onload=e=>{ const d=new Uint8Array(e.target.result); let cv=MDL.composeComplete(d,{multilayer:true}); if(cv){cv=MDL.crackFill(cv,3,2);cv=cropCanvas(cv);} const im=new Image(); im.onload=()=>rcReady(im); im.src=cv?cv.toDataURL():''; };
+    rd.readAsArrayBuffer(file);
+  } else {
+    const rd=new FileReader();
+    rd.onload=e=>{ const im=new Image(); im.onload=()=>rcReady(im); im.src=e.target.result; };
+    rd.readAsDataURL(file);
+  }
+}
+function rcReady(im){ _recolor.img=im; $('rcDrop').style.display='none'; $('rcWork').style.display='block'; rcReset(); }
+function rcReset(){ ['hue:0','sat:100','bri:100','con:100','tintamt:0'].forEach(s=>{const[id,v]=s.split(':');$('rc_'+id).value=v;const vs=$('rc_'+id+'_v'); if(vs)vs.textContent=(id==='tintamt'?v+'%':v);}); $('rc_tint').value='#ffffff'; rcUpdate(); }
+function rcUpdate(){
+  const im=_recolor.img; if(!im) return;
+  const hue=+$('rc_hue').value, sat=+$('rc_sat').value, bri=+$('rc_bri').value, con=+$('rc_con').value, tA=+$('rc_tintamt').value;
+  $('rc_hue_v').textContent=hue; $('rc_sat_v').textContent=sat; $('rc_bri_v').textContent=bri; $('rc_con_v').textContent=con; $('rc_tintamt_v').textContent=tA+'%';
+  const cv=$('rcCanvas'); cv.width=im.naturalWidth; cv.height=im.naturalHeight;
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.filter=`hue-rotate(${hue}deg) saturate(${sat}%) brightness(${bri}%) contrast(${con}%)`;
+  ctx.drawImage(im,0,0);
+  ctx.filter='none';
+  if(tA>0){ // tinte: multiplicar manteniendo alpha
+    const tc=$('rc_tint').value; const tr=parseInt(tc.slice(1,3),16),tg=parseInt(tc.slice(3,5),16),tb=parseInt(tc.slice(5,7),16);
+    const id=ctx.getImageData(0,0,cv.width,cv.height), dd=id.data, k=tA/100;
+    for(let i=0;i<dd.length;i+=4){ if(dd[i+3]===0)continue; dd[i]=dd[i]*(1-k)+(dd[i]*tr/255)*k; dd[i+1]=dd[i+1]*(1-k)+(dd[i+1]*tg/255)*k; dd[i+2]=dd[i+2]*(1-k)+(dd[i+2]*tb/255)*k; }
+    ctx.putImageData(id,0,0);
+  }
+}
+async function rcSave(){
+  const cv=$('rcCanvas');
+  if(Disk.supported() && 'showSaveFilePicker' in window){
+    try{ const fh=await window.showSaveFilePicker({suggestedName:_recolor.name, types:[{description:'PNG',accept:{'image/png':['.png']}}]});
+      const blob=await new Promise(r=>cv.toBlob(r,'image/png')); const w=await fh.createWritable(); await w.write(blob); await w.close(); toast('✅ Guardado a disco'); return; }
+    catch(e){ if(e.name==='AbortError') return; }
+  }
+  const blob=await new Promise(r=>cv.toBlob(r,'image/png')); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=_recolor.name; a.click(); toast('✅ Descargado');
+}
+function rcLoadAnother(){ $('rcWork').style.display='none'; $('rcDrop').style.display='block'; $('rcFile').value=''; _recolor.img=null; }
 
 // ============ PLACEHOLDERS para Resize/Move (UI futura) ============
 $('btnResize').onclick=()=>{
