@@ -17,7 +17,7 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(
 button{font-family:inherit;color:var(--ink);cursor:pointer}
 input{font-family:inherit}
 
-#app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
 
 /* Toolbar (orange) */
 #toolbar{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);border-bottom:2px solid var(--orange);flex-wrap:wrap}
@@ -39,7 +39,7 @@ input{font-family:inherit}
 #btnLang .fl:hover{opacity:.7}
 
 /* Body */
-#body{display:grid;grid-template-columns:280px 1fr 290px;min-height:0}
+#body{flex:1;display:grid;grid-template-columns:280px 1fr 290px;min-height:0}
 #sidebar{background:var(--panel);border-right:1px solid var(--line);display:grid;grid-template-rows:auto auto minmax(120px,1fr) auto;min-height:0}
 #rightbar{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .panel-h{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:7px 10px 5px;display:flex;align-items:center;gap:7px}
@@ -185,7 +185,6 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
 
   <!-- ===== TOOLBAR ===== -->
   <div id="toolbar">
-    <div class="brand">🦁 <small>Lionheart</small></div>
     <!-- Cargar Cache (primer icono) -->
     <div class="tb-group">
       <button class="tb-btn icon" id="btnFolder" data-i18n-title="b_folder" title="Cargar carpeta Cache">🗂️</button>
@@ -225,11 +224,11 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
       <button class="tb-btn icon" id="btnRecolorTool" title="Recolorear imágenes y guardar">🎨</button>
     </div>
     <div class="spacer"></div>
-    <div class="hint" id="modeHint"></div>
     <div class="tb-group" style="border-right:none;border-left:1px solid var(--line);margin-left:4px">
       <button class="tb-btn" id="btnLang" title="Idioma / Language">
         <span class="fl" data-lang="es" data-active="1">🇪🇸</span><span class="fl" data-lang="en">🇬🇧</span>
       </button>
+      <button class="tb-btn icon" id="btnKeys" data-i18n-title="b_keys" title="Atajos de teclado">⌨️</button>
       <button class="tb-btn icon" id="btnAbout" data-i18n-title="b_credits" title="Créditos">ℹ️</button>
     </div>
   </div>
@@ -280,8 +279,13 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
       <div id="status">—</div>
       <div id="empty">
         <h2 data-i18n="empty_h">Editor de mapas para Infinity Engine</h2>
-        <p data-i18n-html="empty_p">Carga la carpeta <code>Cache</code> de tu proyecto (la que contiene <code>Models</code> y <code>Textures</code> con los <code>.png</code> ya generados). Las rutas se conservan tal cual para que los mapas sean compatibles.</p>
-        <button class="big" id="btnFolder2" data-i18n="empty_btn">📁 Cargar carpeta Cache…</button>
+        <p data-i18n-html="empty_p">Sigue estos pasos para cargar el contenido del juego:</p>
+        <ol id="emptySteps" data-i18n-html="empty_steps" style="text-align:left;max-width:520px;margin:14px auto 4px;padding-left:22px;line-height:1.7;color:#c8cfd8;font-size:13.5px">
+          <li>Descomprime el archivo <code>Data.dat</code> de tu directorio de instalación de <i>Lionheart</i>.</li>
+          <li>Pulsa el botón de abajo y selecciona la carpeta <code>Cache</code> (dentro de la carpeta <code>Data</code> que acabas de descomprimir).</li>
+          <li>Puedes añadir tus propias carpetas con archivos <code>.png</code> personalizados dentro de esa misma carpeta <code>Cache</code>; el editor también los cargará.</li>
+        </ol>
+        <button class="big" id="btnFolder2" data-i18n="empty_btn">📁 Seleccionar carpeta Cache…</button>
         <p style="font-size:11px" data-i18n="empty_note">Requiere Chrome o Edge. La carpeta se lee solo en tu equipo; nada se sube a ningún sitio.</p>
       </div>
     </div>
@@ -301,6 +305,15 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
       </div>
       <div id="objList"></div>
     </div>
+  </div>
+</div>
+
+<!-- ===== Keyboard shortcuts modal ===== -->
+<div id="keysModal" class="modal-bg">
+  <div class="modal" style="width:min(620px,96vw)">
+    <button class="modal-x" id="keysClose">✕</button>
+    <div class="modal-tabs"><button class="mtab" data-active="1" id="keysTitle">⌨️ Atajos de teclado</button></div>
+    <div class="modal-body" id="keysBody"></div>
   </div>
 </div>
 
@@ -613,7 +626,7 @@ const T = {
     b_zax:"📜 Importar .zax", z_btn_title:"Cargar un mapa original de Lionheart (.zax)",
     z_loaded:"Mapa .zax cargado · {n} modelos · {t} texturas", z_models_only:"{n} modelos colocados (carga la carpeta Cache para ver las imágenes)",
     z_bad:"No parece un .zax válido (falta Width/Height)", z_nocache:"Primero carga la carpeta Cache para resolver los modelos y texturas", z_loading:"Cargando mapa .zax…",
-    b_terrain:"🖌️ Terreno", b_objects:"🧩 Objetos", b_folder:"📁 Cargar carpeta Cache…", b_credits:"ℹ️ Créditos",
+    b_terrain:"🖌️ Terreno", b_objects:"🧩 Objetos", b_folder:"📁 Cargar carpeta Cache…", b_credits:"ℹ️ Créditos", b_keys:"⌨️ Atajos de teclado",
     t_undo:"Deshacer (Ctrl+Z)", t_redo:"Rehacer (Ctrl+Y)", t_cut:"Cortar (Ctrl+X)", t_copy:"Copiar (Ctrl+C)", t_paste:"Pegar (Ctrl+V)",
     hint_paint:"Modo: Terreno — clic para pintar la textura seleccionada",
     hint_place:"Modo: Objetos — arrastra un .png al mapa; mueve y reordena con el ratón",
@@ -623,8 +636,9 @@ const T = {
     h_terr:"Capas de terreno", t_addterr:"Añadir capa (textura seleccionada)", t_needLayer:"Crea o selecciona una capa de terreno primero", terr_empty:"Sin capas de terreno.\nElige una textura en Archivos y pulsa ➕ (o arrástrala al mapa).", terr_opacity:"Opacidad de la capa", u_layer:"capa", u_layers:"capas",
     bb_brush:"Pincel", bb_eraser:"Borrador", bb_size:"Tamaño", bb_soft:"Difuminado", bb_flow:"Flujo", bb_fill:"Rellenar capa", bb_clear:"Vaciar capa", bb_hint:"Pinta sobre la capa activa para mezclar · [ ] tamaño · B/E pincel/borrador",
     empty_h:"Editor de mapas para Infinity Engine",
-    empty_p:"Carga la carpeta <code>Cache</code> de tu proyecto (la que contiene <code>Models</code> y <code>Textures</code> con los <code>.png</code> ya generados). Las rutas se conservan tal cual para que los mapas sean compatibles.",
-    empty_btn:"📁 Cargar carpeta Cache…",
+    empty_p:"Sigue estos pasos para cargar el contenido del juego:",
+    empty_steps:"<li>Descomprime el archivo <code>Data.dat</code> de tu directorio de instalación de <i>Lionheart</i>.</li><li>Pulsa el botón de abajo y selecciona la carpeta <code>Cache</code> (dentro de la carpeta <code>Data</code> que acabas de descomprimir).</li><li>Puedes añadir tus propias carpetas con archivos <code>.png</code> personalizados dentro de esa misma carpeta <code>Cache</code>; el editor también los cargará.</li>",
+    empty_btn:"📁 Seleccionar carpeta Cache…",
     empty_note:"Requiere Chrome o Edge. La carpeta se lee solo en tu equipo; nada se sube a ningún sitio.",
     u_tiles:"tiles", u_zoom:"zoom", u_cell:"celda", u_sel:"sel",
     prev_tex:"🟩 Textura · {n}", prev_obj:"🟦 Objeto · {n}",
@@ -665,7 +679,7 @@ const T = {
     b_zax:"📜 Import .zax", z_btn_title:"Load an original Lionheart map (.zax)",
     z_loaded:"Loaded .zax · {n} models · {t} textures", z_models_only:"{n} models placed (load the Cache folder to see the images)",
     z_bad:"Not a valid .zax (missing Width/Height)", z_nocache:"Load the Cache folder first to resolve models and textures", z_loading:"Loading .zax map…",
-    b_terrain:"🖌️ Terrain", b_objects:"🧩 Objects", b_folder:"📁 Load Cache folder…", b_credits:"ℹ️ Credits",
+    b_terrain:"🖌️ Terrain", b_objects:"🧩 Objects", b_folder:"📁 Load Cache folder…", b_credits:"ℹ️ Credits", b_keys:"⌨️ Keyboard shortcuts",
     t_undo:"Undo (Ctrl+Z)", t_redo:"Redo (Ctrl+Y)", t_cut:"Cut (Ctrl+X)", t_copy:"Copy (Ctrl+C)", t_paste:"Paste (Ctrl+V)",
     hint_paint:"Mode: Terrain — click to paint the selected texture",
     hint_place:"Mode: Objects — drag a .png onto the map; move and reorder with the mouse",
@@ -675,8 +689,9 @@ const T = {
     h_terr:"Terrain layers", t_addterr:"Add layer (selected texture)", t_needLayer:"Create or select a terrain layer first", terr_empty:"No terrain layers.\nPick a texture in Files and press ➕ (or drag it onto the map).", terr_opacity:"Layer opacity", u_layer:"layer", u_layers:"layers",
     bb_brush:"Brush", bb_eraser:"Eraser", bb_size:"Size", bb_soft:"Softness", bb_flow:"Flow", bb_fill:"Fill layer", bb_clear:"Clear layer", bb_hint:"Paint on the active layer to blend · [ ] size · B/E brush/eraser",
     empty_h:"Map editor for the Infinity Engine",
-    empty_p:"Load your project's <code>Cache</code> folder (the one with <code>Models</code> and <code>Textures</code> and the generated <code>.png</code> files). Paths are kept exactly as-is so maps stay compatible.",
-    empty_btn:"📁 Load Cache folder…",
+    empty_p:"Follow these steps to load the game content:",
+    empty_steps:"<li>Unpack the <code>Data.dat</code> file from your <i>Lionheart</i> install directory.</li><li>Click the button below and select the <code>Cache</code> folder (inside the <code>Data</code> folder you just unpacked).</li><li>You can add your own folders with custom <code>.png</code> files inside that same <code>Cache</code> folder; the editor will load them too.</li>",
+    empty_btn:"📁 Select Cache folder…",
     empty_note:"Requires Chrome or Edge. The folder is read only on your computer; nothing is uploaded.",
     u_tiles:"tiles", u_zoom:"zoom", u_cell:"cell", u_sel:"sel",
     prev_tex:"🟩 Texture · {n}", prev_obj:"🟦 Object · {n}",
@@ -744,7 +759,7 @@ const state = {
   lang:'es',
   files:new Map(), tree:null, imgCache:new Map(), pending:new Set(),
   mode:'place', selectedPath:null, paintTexture:null,
-  map:newMap(32,32),
+  map:newMap(40,30),
   cam:{x:-200,y:-120,zoom:0.5},
   selObj:null, clipboard:null, undo:[], redo:[], dirty:true,
 };
@@ -756,7 +771,7 @@ function newMap(gw,gh){
 }
 const toBack = p => p.replace(/\//g,'\\');
 const norm   = p => p.replace(/\\/g,'/').toLowerCase();
-function classify(rel){ const l=rel.toLowerCase(); if(l.includes('/textures/'))return 'tex'; if(l.includes('/models/'))return 'obj'; return 'obj'; }
+function classify(rel){ const l=rel.toLowerCase(); if(l.includes('textures/'))return 'tex'; if(l.includes('/models/'))return 'obj'; return 'obj'; }
 
 /* ============================================================ FOLDER LOADING */
 $('folderInput').addEventListener('change', e=> loadFolder(e.target.files));
@@ -764,14 +779,15 @@ $('btnFolder').onclick = ()=> $('folderInput').click();
 $('btnFolder2').onclick = ()=> $('folderInput').click();
 
 function loadFolder(fileList){
-  const files=[...fileList].filter(f=>/\.png$/i.test(f.name));
+  const files=[...fileList].filter(f=>/\.(png|mdl16|frm16|seq16)$/i.test(f.name));
   if(!files.length){ toast(t('t_noPng'), true); return; }
-  state.files.clear(); state.imgCache.clear();
+  state.files.clear(); state.imgCache.clear(); mdlData.clear(); mdlPix.clear();
   for(const f of files){
     let rel=f.webkitRelativePath||f.name;
     const idx=rel.toLowerCase().indexOf('cache/');
     if(idx>=0) rel=rel.slice(idx);
-    state.files.set(toBack(rel), { file:f, kind:classify(rel), name:f.name.replace(/\.png$/i,''), rel });
+    const isMdl=/\.mdl16$/i.test(f.name), isFrm=/\.frm16$/i.test(f.name), isSeq=/\.seq16$/i.test(f.name);
+    state.files.set(toBack(rel), { file:f, kind:classify(rel), name:f.name.replace(/\.(png|mdl16|frm16|seq16)$/i,''), rel, mdl:isMdl, frm16:isFrm, seq16:isSeq });
   }
   buildTree(); renderTree();
   $('empty').style.display='none';
@@ -850,10 +866,67 @@ function selectFile(key, el){
 function showPreview(key){
   const info=state.files.get(key); if(!info) return;
   const box=$('preview'); box.innerHTML='';
+  $('previewName').textContent = info.kind==='tex' ? t('prev_tex',{n:info.name}) : t('prev_obj',{n:info.name});
+  if(isMdlKey(key)){
+    ensureMdl(key).then(e=>{
+      if(state.selectedPath!==key) return;
+      if(!e||!e.frames.length){ box.textContent='MDL16 sin capas'; return; }
+      const cv=mdlPixCanvas(key,0,e.frames[0].shift);
+      if(cv){ const c2=cropCanvas(cv); c2.style.maxWidth='100%'; c2.style.imageRendering='pixelated'; box.appendChild(c2); }
+      $('previewName').textContent = `${info.name} · ${e.frames.length} capa(s)`;
+    });
+    return;
+  }
+  if(isFrm16Key(key)){
+    info.file.arrayBuffer().then(buf=>{
+      if(state.selectedPath!==key) return;
+      const cv=FRM16.decode(new Uint8Array(buf));
+      if(cv){ state.imgCache.set(key,cv); cv.style.maxWidth='100%'; cv.style.imageRendering='pixelated'; box.appendChild(cv); $('previewName').textContent=`${info.name} · ${cv.width}×${cv.height}`; }
+      else box.textContent='FRM16 no reconocido';
+    }).catch(()=>{ box.textContent='Error al leer FRM16'; });
+    return;
+  }
   const img=document.createElement('img'); img.src=URL.createObjectURL(info.file);
   img.onload=()=>URL.revokeObjectURL(img.src); box.appendChild(img);
-  $('previewName').textContent = info.kind==='tex' ? t('prev_tex',{n:info.name}) : t('prev_obj',{n:info.name});
 }
+
+/* ============================================================ DECODIFICADOR FRM16 (texturas y contenido del juego) */
+const FRM16 = {
+  // Decodifica un .frm16 a un canvas. Detecta el tipo por la cabecera:
+  //  · magic 01 32 10            → frame estilo MDL16 (RLE + shift): usa el motor MDL
+  //  · magic 32 10, flags 0x0040 → RAW (RGB565 crudo, datos en offset 32)  [texturas de terreno]
+  //  · magic 32 10, flags 0x0044 → comprimido (RLE en offset 40, SIN shift, con transparencia)
+  decode(d){
+    if(!d || d.length<16) return null;
+    if(d[0]===0x01 && d[1]===0x32 && d[2]===0x10){           // variante MDL16
+      const frames=MDL.decodeAll(d).filter(f=>f.opaque>0);
+      if(!frames.length) return null;
+      frames.sort((a,b)=>b.opaque-a.opaque);
+      const f=frames[0], rows=MDL.trimEdgeRows(f.rows), sh=MDL.bestShift(rows,f.width);
+      return MDL.toCanvas(rows,f.width,sh,true);
+    }
+    if(d[0]!==0x32 || d[1]!==0x10){
+      // contenedor (SEQ16 u otro envoltorio): buscar un frame 01 32 10 embebido
+      const frames=MDL.decodeAll(d).filter(f=>f.opaque>0);
+      if(frames.length){ frames.sort((a,b)=>b.opaque-a.opaque); const f=frames[0]; const sh=MDL.bestShift(f.rows,f.width); return MDL.toCanvas(f.rows,f.width,sh,false); }
+      return null;
+    }
+    const w=d[6]|(d[7]<<8), h=d[8]|(d[9]<<8);
+    if(w<1||h<1||w>8192||h>8192) return null;
+    const flags=d[12]|(d[13]<<8);
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    const ctx=cv.getContext('2d'), img=ctx.createImageData(w,h), o=img.data;
+    const put=(idx,v)=>{ o[idx]=((v>>11)&31)*255/31; o[idx+1]=((v>>5)&63)*255/63; o[idx+2]=(v&31)*255/31; o[idx+3]=255; };
+    if(flags & 0x04){                                        // comprimido (RLE, sin shift)
+      const rows=MDL.decodeByHeight(d,40,w,h);
+      for(let y=0;y<h;y++){ const row=rows[y]; for(let x=0;x<w;x++){ const v=row[x]; if(v!==null&&v!==0xFFFF) put((y*w+x)*4,v); } }
+    } else {                                                 // RAW (RGB565 crudo)
+      for(let i=0;i<w*h;i++){ const p=32+i*2; if(p+1<d.length) put(i*4, d[p]|(d[p+1]<<8)); }
+    }
+    ctx.putImageData(img,0,0); return cv;
+  }
+};
+function isFrm16Key(key){ const i=state.files.get(key); return !!(i && (i.frm16 || i.seq16 || /\.(frm16|seq16)$/i.test(i.rel||''))); }
 
 /* ============================================================ IMAGE CACHE */
 function getImage(key){
@@ -861,6 +934,13 @@ function getImage(key){
   if(state.pending.has(key)) return null;
   const info=state.files.get(key); if(!info) return null;
   state.pending.add(key);
+  if(isFrm16Key(key)){                                       // FRM16 → decodificar a canvas
+    info.file.arrayBuffer().then(buf=>{
+      try{ const cv=FRM16.decode(new Uint8Array(buf)); if(cv) state.imgCache.set(key,cv); }catch(e){}
+      state.pending.delete(key); markDirty(); renderMinimap(); onTexLoaded(key);
+    }).catch(()=>state.pending.delete(key));
+    return null;
+  }
   const img=new Image();
   img.onload=()=>{ state.imgCache.set(key,img); state.pending.delete(key); markDirty(); renderMinimap(); onTexLoaded(key); };
   img.onerror=()=>state.pending.delete(key);
@@ -872,6 +952,10 @@ function ensureLoaded(keys){
   for(const key of keys){
     if(state.imgCache.has(key)) continue;
     const info=state.files.get(key); if(!info) continue;
+    if(isFrm16Key(key)){
+      proms.push(info.file.arrayBuffer().then(buf=>{ try{ const cv=FRM16.decode(new Uint8Array(buf)); if(cv) state.imgCache.set(key,cv); }catch(e){} }).catch(()=>{}));
+      continue;
+    }
     proms.push(new Promise(res=>{ const img=new Image();
       img.onload=()=>{ state.imgCache.set(key,img); res(); };
       img.onerror=()=>res(); img.src=URL.createObjectURL(info.file); }));
@@ -879,7 +963,51 @@ function ensureLoaded(keys){
   return Promise.all(proms);
 }
 
-/* ============================================================ CANVAS / CAMERA */
+/* ============================================================ OBJETOS MDL16 (capas + shift en vivo) */
+const mdlData = new Map();   // key -> {frames:[{width,height,rows,opaque,shift}]}
+const mdlPix  = new Map();   // "key|layer|shift" -> canvas
+function isMdlKey(key){ const i=state.files.get(key); return !!(i && (i.mdl || /\.mdl16$/i.test(i.name||''))); }
+async function ensureMdl(key){
+  if(mdlData.has(key)) return mdlData.get(key);
+  const info=state.files.get(key); if(!info) return null;
+  try{
+    const d=new Uint8Array(await info.file.arrayBuffer());
+    let frames=MDL.decodeAll(d).filter(f=>f.opaque>0);
+    frames.forEach(f=>{ f.rows=MDL.trimEdgeRows(f.rows); });
+    // imagen-like primero, ordenadas por densidad (la principal primero)
+    frames.sort((a,b)=>b.opaque-a.opaque);
+    frames.forEach(f=>{ f.shift=MDL.bestShift(f.rows,f.width); });
+    const e={frames};
+    mdlData.set(key,e); return e;
+  }catch(err){ mdlData.set(key,{frames:[]}); return mdlData.get(key); }
+}
+function mdlPixCanvas(key,layer,shift){
+  const e=mdlData.get(key); if(!e||!e.frames[layer]) return null;
+  const f=e.frames[layer]; const W=f.width; const sh=((shift%W)+W)%W;
+  const ck=key+'|'+layer+'|'+sh;
+  if(mdlPix.has(ck)) return mdlPix.get(ck);
+  const cv=MDL.toCanvas(f.rows,W,sh,false);   // SIN recortar → tamaño estable al ajustar shift
+  mdlPix.set(ck,cv); return cv;
+}
+// imagen lista para un objeto MDL (o null si aún decodificando)
+function mdlObjImage(o){
+  const e=mdlData.get(o.path);
+  if(!e){ ensureMdl(o.path).then(()=>markDirty()); return null; }
+  if(!e.frames.length) return null;
+  if(o.layer==null || o.layer>=e.frames.length) o.layer=0;
+  if(o.shift==null) o.shift=e.frames[o.layer].shift;
+  const base=mdlPixCanvas(o.path,o.layer,o.shift);
+  if(!base) return null;
+  const c=o.crack||0;
+  if(c<=0) return base;
+  const W=e.frames[o.layer].width, sh=((o.shift%W)+W)%W;
+  const ck=o.path+'|'+o.layer+'|'+sh+'|c'+c;
+  if(mdlPix.has(ck)) return mdlPix.get(ck);
+  const cp=document.createElement('canvas'); cp.width=base.width; cp.height=base.height;
+  cp.getContext('2d').drawImage(base,0,0);
+  const out=MDL.crackFill(cp,3,c);   // c = nº de pasadas (más pasadas = más cosido)
+  mdlPix.set(ck,out); return out;
+}
 const cv=$('canvas'), ctx=cv.getContext('2d'), stage=$('stage');
 function resizeCanvas(){
   const r=stage.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
@@ -1034,14 +1162,25 @@ function draw(){
   ctx.imageSmoothingEnabled=true;
   for(const o of m.objects){
     if(!effVisible(o)) continue;
-    const img=getImage(o.path);
+    const img = isMdlKey(o.path) ? mdlObjImage(o) : getImage(o.path);
     const x=w2sX(o.x), y=w2sY(o.y), ww=o.w*cam.zoom, hh=o.h*cam.zoom;
     if(img) drawImgFlipped(ctx,img,x,y,ww,hh,o.flipH,o.flipV);
     else { ctx.fillStyle='rgba(120,140,170,.25)'; ctx.fillRect(x,y,ww,hh); ctx.strokeStyle='#46505c'; ctx.strokeRect(x,y,ww,hh); }
     if(o.id===state.selObj){
-      ctx.strokeStyle='#e8b54b'; ctx.lineWidth=2; ctx.strokeRect(x-1,y-1,ww+2,hh+2);
-      ctx.fillStyle='#e8b54b'; const tk=4;
+      ctx.strokeStyle = shiftAdjust ? '#5fbf6e' : '#e8b54b'; ctx.lineWidth=2; ctx.strokeRect(x-1,y-1,ww+2,hh+2);
+      ctx.fillStyle = ctx.strokeStyle; const tk=4;
       [[x,y],[x+ww,y],[x,y+hh],[x+ww,y+hh]].forEach(([px,py])=>ctx.fillRect(px-tk,py-tk,tk*2,tk*2));
+      // indicador de capa/shift para objetos MDL
+      if(isMdlKey(o.path)){
+        const e=mdlData.get(o.path);
+        if(e&&e.frames.length){
+          const ck=o.crack?`  ·  🪡${o.crack}`:'';
+          const txt = (shiftAdjust ? `SHIFT ${o.shift||0}  ( , .  ajustar · S salir )` : `Capa ${(o.layer||0)+1}/${e.frames.length}  ( , .  cambiar · S shift · +/- cosido )`) + ck;
+          ctx.font='12px ui-monospace,monospace'; const tw=ctx.measureText(txt).width;
+          ctx.fillStyle='rgba(10,12,16,.85)'; ctx.fillRect(x-1, y-22, tw+12, 18);
+          ctx.fillStyle = shiftAdjust ? '#7fe08c' : '#e8b54b'; ctx.fillText(txt, x+5, y-9);
+        }
+      }
     }
   }
 
@@ -1081,14 +1220,38 @@ function mmJump(e){
 }
 
 /* ============================================================ MOUSE */
-let dragMode=null, panStart=null, objStart=null, spaceDown=false;
+let dragMode=null, panStart=null, objStart=null, spaceDown=false, resizeData=null, shiftAdjust=false;
 cv.addEventListener('wheel', e=>{
   e.preventDefault();
   const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
   const wx=s2wX(mx), wy=s2wY(my), f=e.deltaY<0?1.12:1/1.12;
-  cam.zoom=Math.min(4,Math.max(0.05,cam.zoom*f)); cam.x=wx-mx/cam.zoom; cam.y=wy-my/cam.zoom;
+  cam.zoom=Math.min(1,Math.max(0.05,cam.zoom*f)); cam.x=wx-mx/cam.zoom; cam.y=wy-my/cam.zoom;
   markDirty(); renderMinimap();
 },{passive:false});
+
+// Detecta si (mx,my) en pantalla cae sobre un tirador de esquina del objeto seleccionado
+function resizeHandleAt(mx,my){
+  const o=obj(state.selObj); if(!o) return null;
+  const x=w2sX(o.x), y=w2sY(o.y), ww=o.w*cam.zoom, hh=o.h*cam.zoom, R=9;
+  const corners=[['nw',x,y],['ne',x+ww,y],['sw',x,y+hh],['se',x+ww,y+hh]];
+  for(const [name,cx,cy] of corners){ if(Math.abs(mx-cx)<=R && Math.abs(my-cy)<=R) return name; }
+  return null;
+}
+function applyResize(o,d,mx,my,free){
+  const dxw=(mx-d.mx)/cam.zoom, dyw=(my-d.my)/cam.zoom;
+  const east=d.corner.includes('e'), south=d.corner.includes('s');
+  let nw = east ? d.ow+dxw : d.ow-dxw;
+  let nh = south ? d.oh+dyw : d.oh-dyw;
+  nw=Math.max(8,nw); nh=Math.max(8,nh);
+  if(!free){ // proporcional (uniforme): escala por el eje que más cambia
+    const sx=nw/d.ow, sy=nh/d.oh; const s=Math.abs(sx-1)>=Math.abs(sy-1)?sx:sy;
+    nw=Math.max(8,d.ow*s); nh=Math.max(8,d.oh*s);
+  }
+  let nx=d.ox, ny=d.oy;
+  if(!east) nx=d.ox+(d.ow-nw);   // ancla la esquina opuesta
+  if(!south) ny=d.oy+(d.oh-nh);
+  o.w=Math.round(nw); o.h=Math.round(nh); o.x=Math.round(nx); o.y=Math.round(ny);
+}
 
 cv.addEventListener('mousedown', e=>{
   const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
@@ -1096,6 +1259,9 @@ cv.addEventListener('mousedown', e=>{
   if(e.button===1 || spaceDown){ dragMode='pan'; panStart={mx,my,cx:cam.x,cy:cam.y}; stage.dataset.mode='pan'; return; }
   if(state.mode==='paint' && e.button===0){ const L=activeTerrLayer(); if(!L){ toast(t('t_needLayer'),true); return; } dragMode='paint'; pushTerrUndo(L); lastPaint=null; brushStroke(wx,wy); return; }
   if(e.button===0){
+    // ¿esquina del objeto seleccionado? → redimensionar
+    const hnd=resizeHandleAt(mx,my);
+    if(hnd){ const o=obj(state.selObj); dragMode='resize'; resizeData={corner:hnd,ox:o.x,oy:o.y,ow:o.w,oh:o.h,mx,my}; pushUndo(); e.preventDefault(); return; }
     const hit=hitObject(wx,wy);
     if(hit){ selectObject(hit.id); dragMode='obj'; objStart={ox:hit.x,oy:hit.y,mx,my}; pushUndo(); }
     else { dragMode='pan'; panStart={mx,my,cx:cam.x,cy:cam.y}; stage.dataset.mode='pan'; deselect(); }
@@ -1106,11 +1272,15 @@ window.addEventListener('mousemove', e=>{
   const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
   if(dragMode==='pan'){ cam.x=panStart.cx-(mx-panStart.mx)/cam.zoom; cam.y=panStart.cy-(my-panStart.my)/cam.zoom; markDirty(); renderMinimap(); }
   else if(dragMode==='paint'){ brushStroke(s2wX(mx),s2wY(my)); }
+  else if(dragMode==='resize'){ const o=obj(state.selObj); if(o){ applyResize(o,resizeData,mx,my,e.shiftKey); markDirty(); updateStatus(); renderMinimap(); } }
   else if(dragMode==='obj'){ const o=obj(state.selObj); if(o){ o.x=Math.round(objStart.ox+(mx-objStart.mx)/cam.zoom); o.y=Math.round(objStart.oy+(my-objStart.my)/cam.zoom); markDirty(); updateStatus(); renderMinimap(); } }
 });
-window.addEventListener('mouseup', ()=>{ if(dragMode==='paint'||dragMode==='obj') renderMinimap(); if(dragMode==='paint') lastPaint=null; dragMode=null; stage.dataset.mode=state.mode; });
-cv.addEventListener('mousemove', e=>{ const r=cv.getBoundingClientRect(); const wx=s2wX(e.clientX-r.left), wy=s2wY(e.clientY-r.top); updateStatus(wx,wy); if(state.mode==='paint'){ brushWX=wx; brushWY=wy; markDirty(); } });
-cv.addEventListener('mouseleave', ()=>{ if(brushWX!=null){ brushWX=brushWY=null; markDirty(); } });
+window.addEventListener('mouseup', ()=>{ if(dragMode==='paint'||dragMode==='obj'||dragMode==='resize') renderMinimap(); if(dragMode==='paint') lastPaint=null; dragMode=null; stage.dataset.mode=state.mode; });
+cv.addEventListener('mousemove', e=>{ const r=cv.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top; const wx=s2wX(mx), wy=s2wY(my); updateStatus(wx,wy);
+  if(state.mode==='paint'){ brushWX=wx; brushWY=wy; markDirty(); }
+  else if(!dragMode){ const hnd=resizeHandleAt(mx,my); cv.style.cursor = hnd ? ((hnd==='nw'||hnd==='se')?'nwse-resize':'nesw-resize') : ''; }
+});
+cv.addEventListener('mouseleave', ()=>{ if(brushWX!=null){ brushWX=brushWY=null; markDirty(); } cv.style.cursor=''; });
 
 function paintAt(wx,wy){
   const m=state.map, c=Math.floor(wx/TILE), r=Math.floor(wy/TILE);
@@ -1125,8 +1295,8 @@ function hitObject(wx,wy){
 }
 
 /* ============================================================ DRAG-DROP place */
-cv.addEventListener('dragover', e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
-cv.addEventListener('drop', e=>{
+stage.addEventListener('dragover', e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+stage.addEventListener('drop', e=>{
   e.preventDefault();
   const key=e.dataTransfer.getData('text/path'); if(!key) return;
   const r=cv.getBoundingClientRect(), wx=s2wX(e.clientX-r.left), wy=s2wY(e.clientY-r.top);
@@ -1142,10 +1312,21 @@ cv.addEventListener('drop', e=>{
 });
 function placeObject(key, wx, wy){
   const info=state.files.get(key); if(!info) return; pushUndo();
+  if(isMdlKey(key)){
+    ensureMdl(key).then(e=>{
+      if(!e || !e.frames.length){ toast('Ese MDL16 no tiene capas de imagen',true); return; }
+      const li=0; const cv=mdlPixCanvas(key,li,e.frames[li].shift);
+      const iw=cv?cv.width:e.frames[li].width, ih=cv?cv.height:e.frames[li].height;
+      const o={id:state.map.nextId++,path:key,x:Math.round(wx-iw/2),y:Math.round(wy-ih/2),w:iw,h:ih,visible:true,groupId:null,layer:li,shift:e.frames[li].shift};
+      state.map.objects.push(o); selectObject(o.id); renderObjList(); markDirty(); renderMinimap();
+    });
+    return;
+  }
   const img=getImage(key);
   const finish=(iw,ih)=>{ const o={id:state.map.nextId++,path:key,x:Math.round(wx-iw/2),y:Math.round(wy-ih/2),w:iw,h:ih,visible:true,groupId:null};
     state.map.objects.push(o); selectObject(o.id); renderObjList(); markDirty(); renderMinimap(); };
-  if(img) finish(img.naturalWidth,img.naturalHeight);
+  if(img) finish(img.naturalWidth||img.width, img.naturalHeight||img.height);
+  else if(isFrm16Key(key)){ info.file.arrayBuffer().then(buf=>{ const cv=FRM16.decode(new Uint8Array(buf)); if(cv){ state.imgCache.set(key,cv); finish(cv.width,cv.height); } else finish(128,128); }).catch(()=>finish(128,128)); }
   else { const p=new Image(); p.onload=()=>finish(p.naturalWidth,p.naturalHeight); p.onerror=()=>finish(128,128); p.src=URL.createObjectURL(info.file); }
 }
 
@@ -1310,7 +1491,7 @@ function centerOnObject(id){
 }
 
 /* ============================================================ MODES */
-function setModeHint(){ $('modeHint').textContent = state.mode==='paint' ? t('hint_paint') : t('hint_place'); }
+function setModeHint(){ const el=$('modeHint'); if(el) el.textContent = state.mode==='paint' ? t('hint_paint') : t('hint_place'); }
 function setMode(m){
   state.mode=m; stage.dataset.mode=m;
   $('btnModePaint').dataset.active = m==='paint'?'1':'0';
@@ -1360,9 +1541,9 @@ $('btnPaste').onclick=()=>{ if(!state.clipboard)return; pushUndo();
 
 /* ============================================================ NEW / SAVE / OPEN */
 $('btnNew').onclick=()=>{
-  const v=prompt(t('p_new'), `${state.map.gridW} x ${state.map.gridH}`); if(!v) return;
+  const v=prompt(t('p_new')+'  (máx 40 × 30 — límite de BG2 EE)', `${Math.min(40,state.map.gridW)} x ${Math.min(30,state.map.gridH)}`); if(!v) return;
   const mt=v.match(/(\d+)\s*[x×]\s*(\d+)/i); if(!mt){ toast(t('t_badSize'), true); return; }
-  const gw=Math.max(1,Math.min(512,+mt[1])), gh=Math.max(1,Math.min(512,+mt[2]));
+  const gw=Math.max(1,Math.min(40,+mt[1])), gh=Math.max(1,Math.min(30,+mt[2]));
   state.map=newMap(gw,gh); state.undo.length=0; state.redo.length=0; deselect();
   cam.x=-200; cam.y=-120; cam.zoom=0.5; renderObjList(); markDirty(); renderMinimap(); toast(t('t_newMap',{w:gw,h:gh}));
 };
@@ -1518,7 +1699,7 @@ async function loadZaxSizes(){
 function fitView(){
   const m=state.map, mapW=m.gridW*TILE, mapH=m.gridH*TILE;
   const W=cv.clientWidth||800, H=cv.clientHeight||600;
-  cam.zoom=Math.max(0.05, Math.min(4, Math.min(W/mapW, H/mapH)*0.95));
+  cam.zoom=Math.max(0.05, Math.min(1, Math.min(W/mapW, H/mapH)*0.95));
   cam.x = -(W/cam.zoom - mapW)/2;
   cam.y = -(H/cam.zoom - mapH)/2;
 }
@@ -1542,9 +1723,11 @@ $('btnExport').onclick=async ()=>{
     lx.globalCompositeOperation='destination-in'; lx.imageSmoothingEnabled=true; lx.drawImage(L._mask,0,0,W,H); lx.globalCompositeOperation='source-over';
     x.globalAlpha=(L.opacity==null?1:L.opacity); x.drawImage(lc,0,0); x.globalAlpha=1;
   }
+  // asegurar que los MDL16 colocados estén decodificados antes de dibujar
+  await Promise.all([...new Set(m.objects.filter(o=>isMdlKey(o.path)).map(o=>o.path))].map(p=>ensureMdl(p)));
   // objects: smoothing ON
   x.imageSmoothingEnabled=true;
-  for(const o of m.objects){ if(!effVisible(o)) continue; const img=state.imgCache.get(o.path); if(img) drawImgFlipped(x,img,o.x,o.y,o.w,o.h,o.flipH,o.flipV); }
+  for(const o of m.objects){ if(!effVisible(o)) continue; const img=isMdlKey(o.path)?mdlObjImage(o):state.imgCache.get(o.path); if(img) drawImgFlipped(x,img,o.x,o.y,o.w,o.h,o.flipH,o.flipV); }
   c.toBlob(b=>{ if(!b){ toast(t('t_exportFail'), true); return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='mapa.png'; a.click(); URL.revokeObjectURL(a.href);
     toast(t('t_exported',{w:W,h:H})); }, 'image/png');
@@ -1552,6 +1735,82 @@ $('btnExport').onclick=async ()=>{
 
 /* ============================================================ ABOUT modal */
 $('btnAbout').onclick=()=> $('modal').classList.add('show');
+
+/* ===== Ventana de atajos de teclado ===== */
+const KEYBINDINGS = {
+  es:{ title:'⌨️ Atajos de teclado', groups:[
+    {g:'General', items:[
+      ['Espacio (mantener)','Desplazar el lienzo (paneo)'],
+      ['Rueda del ratón','Acercar / alejar — zoom (máx. 100%)'],
+      ['Ctrl + Z','Deshacer'],
+      ['Ctrl + Y','Rehacer'],
+      ['Ctrl + C / X / V','Copiar / Cortar / Pegar'],
+      ['Ctrl + S','Guardar el mapa'],
+    ]},
+    {g:'Modo Terreno (pincel)', items:[
+      ['B','Pincel'],
+      ['E','Borrador'],
+      ['[  /  ]','Reducir / aumentar el tamaño del pincel'],
+    ]},
+    {g:'Objeto seleccionado', items:[
+      ['Flechas','Mover (8 px · con Mayús, 1 px)'],
+      ['H','Voltear horizontalmente'],
+      ['V','Voltear verticalmente'],
+      ['Supr / Retroceso','Eliminar el objeto'],
+      ['Arrastrar una esquina','Redimensionar (Mayús = libre, sin mantener proporción)'],
+    ]},
+    {g:'Objeto MDL16 seleccionado', items:[
+      [',&nbsp; /&nbsp; .','Capa anterior / siguiente'],
+      ['S','Activar / salir del modo Shift (ajuste de desplazamiento)'],
+      [',&nbsp; /&nbsp; .  (en modo Shift)','Ajustar el desplazamiento de la capa en vivo'],
+      ['+&nbsp; /&nbsp; −  (teclado numérico)','Más / menos cosido (crack-fill) en ese objeto'],
+    ]},
+  ]},
+  en:{ title:'⌨️ Keyboard shortcuts', groups:[
+    {g:'General', items:[
+      ['Space (hold)','Pan the canvas'],
+      ['Mouse wheel','Zoom in / out (max 100%)'],
+      ['Ctrl + Z','Undo'],
+      ['Ctrl + Y','Redo'],
+      ['Ctrl + C / X / V','Copy / Cut / Paste'],
+      ['Ctrl + S','Save the map'],
+    ]},
+    {g:'Terrain mode (brush)', items:[
+      ['B','Brush'],
+      ['E','Eraser'],
+      ['[  /  ]','Decrease / increase brush size'],
+    ]},
+    {g:'Selected object', items:[
+      ['Arrow keys','Move (8 px · 1 px with Shift)'],
+      ['H','Flip horizontally'],
+      ['V','Flip vertically'],
+      ['Delete / Backspace','Delete the object'],
+      ['Drag a corner','Resize (Shift = free, no aspect lock)'],
+    ]},
+    {g:'Selected MDL16 object', items:[
+      [',&nbsp; /&nbsp; .','Previous / next layer'],
+      ['S','Toggle Shift mode (offset adjust)'],
+      [',&nbsp; /&nbsp; .  (in Shift mode)','Adjust the layer offset live'],
+      ['+&nbsp; /&nbsp; −  (numpad)','More / less crack-fill on that object'],
+    ]},
+  ]},
+};
+function renderKeys(){
+  const data=KEYBINDINGS[state.lang]||KEYBINDINGS.es;
+  $('keysTitle').textContent=data.title;
+  let html='';
+  for(const sec of data.groups){
+    html+=`<div style="margin:0 0 16px"><div style="color:var(--gold);font-weight:700;font-size:13px;margin:0 0 8px;letter-spacing:.3px">${sec.g}</div><table style="width:100%;border-collapse:collapse;font-size:13px">`;
+    for(const [k,d] of sec.items){
+      html+=`<tr><td style="white-space:nowrap;padding:5px 14px 5px 0;vertical-align:top"><kbd style="background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:2px 8px;font-family:ui-monospace,monospace;font-size:12px;color:var(--ink)">${k}</kbd></td><td style="padding:5px 0;color:#c8cfd8;vertical-align:top">${d}</td></tr>`;
+    }
+    html+='</table></div>';
+  }
+  $('keysBody').innerHTML=html;
+}
+$('btnKeys').onclick=()=>{ renderKeys(); $('keysModal').classList.add('show'); };
+$('keysClose').onclick=()=> $('keysModal').classList.remove('show');
+$('keysModal').addEventListener('click', e=>{ if(e.target===$('keysModal')) $('keysModal').classList.remove('show'); });
 $('modalClose').onclick=()=> $('modal').classList.remove('show');
 $('modal').addEventListener('click', e=>{ if(e.target===$('modal')) $('modal').classList.remove('show'); });
 document.querySelectorAll('.mtab').forEach(tb=>tb.onclick=()=>{
@@ -1580,6 +1839,39 @@ window.addEventListener('keydown', e=>{
   }
   const o=obj(state.selObj);
   if(o){
+    // --- Objetos MDL16: «,» «.» capas · «S» modo shift (ajuste en vivo sobre el terreno) ---
+    if(isMdlKey(o.path)){
+      const md=mdlData.get(o.path);
+      if(!md){ ensureMdl(o.path).then(()=>markDirty()); }
+      else if(md.frames.length){
+        if(o.layer==null || o.layer>=md.frames.length) o.layer=0;
+        // cosido (crack-fill) por objeto: + y - del teclado numérico
+        if(e.code==='NumpadAdd' || (e.key==='+' && !ctrl)){ o.crack=Math.min(8,(o.crack||0)+1); toast(`🪡 Cosido nivel ${o.crack}`); markDirty(); e.preventDefault(); return; }
+        if(e.code==='NumpadSubtract' || (e.key==='-' && !ctrl)){ o.crack=Math.max(0,(o.crack||0)-1); toast(o.crack?`🪡 Cosido nivel ${o.crack}`:'Sin cosido'); markDirty(); e.preventDefault(); return; }
+        if(e.key==='s'||e.key==='S'){
+          shiftAdjust=!shiftAdjust;
+          toast(shiftAdjust?'🎯 Modo SHIFT — «,» y «.» ajustan el desplazamiento · «S» para salir':'🧩 Modo capas — «,» y «.» cambian de capa · «S» para ajustar shift');
+          markDirty(); e.preventDefault(); return;
+        }
+        if(e.key===','||e.key==='.'){
+          const dir=(e.key==='.')?1:-1;
+          if(!e.repeat) pushUndo();   // undo una sola vez aunque se mantenga pulsado
+          if(shiftAdjust){
+            const W=md.frames[o.layer].width;
+            const cur=(o.shift==null?md.frames[o.layer].shift:o.shift);
+            o.shift=((cur+dir)%W+W)%W;
+            toast(`Shift ${o.shift}/${W}`);
+          } else {
+            o.layer=((o.layer+dir)%md.frames.length+md.frames.length)%md.frames.length;
+            o.shift=md.frames[o.layer].shift;
+            const cv=mdlPixCanvas(o.path,o.layer,o.shift);
+            if(cv){ const cx=o.x+o.w/2, cy=o.y+o.h/2; o.w=cv.width; o.h=cv.height; o.x=Math.round(cx-o.w/2); o.y=Math.round(cy-o.h/2); }
+            toast(`Capa ${o.layer+1}/${md.frames.length} · ${md.frames[o.layer].width}×${md.frames[o.layer].rows.length}`);
+          }
+          markDirty(); renderMinimap(); updateStatus(); e.preventDefault(); return;
+        }
+      }
+    }
     const step=e.shiftKey?1:8; let mv=false;
     if(e.key==='ArrowUp'){ o.y-=step; mv=true; } else if(e.key==='ArrowDown'){ o.y+=step; mv=true; }
     else if(e.key==='ArrowLeft'){ o.x-=step; mv=true; } else if(e.key==='ArrowRight'){ o.x+=step; mv=true; }
@@ -1719,6 +2011,15 @@ const MDL = {
     }
     return bestS;
   },
+  // Centrado estilo batch_convert: lleva al borde la columna con MENOS opacidad
+  // (la "costura" natural del sprite). Es el que mejor centra según pruebas.
+  bestShift(rows,width){
+    const col=new Array(width).fill(0);
+    for(const row of rows) for(let x=0;x<width;x++){ const v=row[x]; if(v!==null&&v!==0xFFFF) col[x]++; }
+    let minX=0,minV=Infinity;
+    for(let x=0;x<width;x++){ if(col[x]<minV){ minV=col[x]; minX=x; } }
+    return (width-minX)%width;
+  },
   // Cierra costuras finas: rellena píxeles transparentes con vecinos opacos a ambos
   // lados (H, V o diagonal) hasta 'maxgap' px. No toca la silueta exterior.
   crackFill(canvas, maxgap=3, passes=2){
@@ -1743,12 +2044,56 @@ const MDL = {
     ctx.putImageData(img,0,0);
     return canvas;
   },
-  // Recorta filas-borde espurias (densas y oscuras tras estrecharse el dibujo)
+  // Recorta la línea negra/colores espuria que aparece debajo del dibujo (resto de
+  // tabla u otra capa). SEGURO y dirigido: solo quita una línea OSCURA repentina
+  // (la de encima no era oscura) o una fila densa justo tras un hueco vacío. Tope bajo.
   trimEdgeRows(rows){
-    const stat=row=>{ let op=0,dk=0; for(const v of row){ if(v!==null&&v!==0xFFFF){op++; if(((v>>11)&31)<4&&((v>>5)&63)<8&&(v&31)<4)dk++;} } return [op,dk]; };
+    const isDark=v=>((v>>11)&31)<5 && ((v>>5)&63)<10 && (v&31)<5;
+    const opq=row=>{ let o=0; for(const v of row) if(v!==null&&v!==0xFFFF) o++; return o; };
+    const drk=row=>{ let d=0; for(const v of row) if(v!==null&&v!==0xFFFF&&isDark(v)) d++; return d; };
+    const df =row=>{ const o=opq(row); return o?drk(row)/o:0; };
+    const ch=v=>[(v>>11)&31,(v>>5)&63,v&31];
+    // rugosidad horizontal: cambio medio de color entre píxeles contiguos (ruido = alto)
+    const rough=row=>{ let t=0,c=0,prev=null; for(const v of row){ if(v!==null&&v!==0xFFFF){ if(prev!==null){ const a=ch(v),b=ch(prev); t+=Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2]); c++; } prev=v; } else prev=null; } return c?t/c:0; };
+    // coherencia vertical de color entre dos filas (0..1)
+    const matchRow=(A,B)=>{ let m=0,o=0,n=Math.min(A.length,B.length); for(let x=0;x<n;x++){ const va=A[x]; if(va===null||va===0xFFFF) continue; o++; const vb=B[x]; if(vb===null||vb===0xFFFF) continue; const a=ch(va),b=ch(vb); if(Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2])<12) m++; } return o?m/o:0; };
     let r=rows.slice();
-    while(r.length>=3){ const a=stat(r[r.length-1]),b=stat(r[r.length-2]); if(a[0]>10&&a[0]>b[0]*2&&a[1]>a[0]*0.5) r.pop(); else break; }
-    while(r.length>=3){ const a=stat(r[0]),b=stat(r[1]); if(a[0]>10&&a[0]>b[0]*2&&a[1]>a[0]*0.5) r.shift(); else break; }
+    let maxO=0; for(const row of r){ const o=opq(row); if(o>maxO)maxO=o; }
+    if(maxO===0) return r;
+    // rugosidad de referencia del cuerpo (mediana de muestras del tercio central)
+    const a0=Math.floor(r.length*0.33), b0=Math.floor(r.length*0.67), samp=[];
+    for(let y=a0;y<b0;y+=Math.max(1,Math.floor((b0-a0)/30))){ if(opq(r[y])>20) samp.push(rough(r[y])); }
+    samp.sort((p,q)=>p-q); const bodyRough = samp.length? samp[samp.length>>1] : 8;
+    const LINE=maxO*0.30;               // una "línea" de artefacto suele ser ancha y densa
+    const trimSide=(top)=>{
+      for(let g=0; g<60 && r.length>4; g++){
+        while(r.length>3 && opq(top?r[0]:r[r.length-1])===0){ top?r.shift():r.pop(); }   // vacías
+        if(r.length<=4) break;
+        const at=k=> top? r[k] : r[r.length-1-k];   // k=0 es el borde, hacia el centro al crecer
+        const drop=s=>{ for(let k=0;k<s;k++){ top?r.shift():r.pop(); } };
+        let did=false;
+        // (1) BANDA densa de hasta 3 líneas (con al menos una oscura) que acaba en contenido escaso
+        for(let s=3;s>=1;s--){
+          if(r.length<=s+2) continue;
+          const band=[]; for(let k=0;k<s;k++) band.push(at(k));
+          if(!band.every(row=>opq(row)>LINE)) continue;      // todas son líneas densas
+          if(!band.some(row=>df(row)>0.4)) continue;         // la banda contiene parte oscura
+          if(opq(at(s))>=LINE) continue;                     // la fila de dentro aún es línea → no cortar aquí
+          drop(s); did=true; break;
+        }
+        if(did) continue;
+        const e=at(0), inside=at(1);
+        // (2) ANOMALÍA oscura de una fila (línea negra suelta sobre contenido no oscuro)
+        if(opq(e)>8 && df(e)>0.45 && df(inside) < df(e)*0.4){ drop(1); continue; }
+        // (3) FILA DE RUIDO multicolor (cabecera/bytes basura): solo en filas sustanciales,
+        //     baja coherencia vertical de color o rugosidad muy superior a la del cuerpo
+        if(opq(e)>Math.max(25,maxO*0.20) && ( matchRow(e,inside)<0.45 || rough(e) > Math.max(11,bodyRough*2.0) )){ drop(1); continue; }
+        break;
+      }
+    };
+    trimSide(false); trimSide(true);
+    while(r.length>2 && opq(r[r.length-1])===0) r.pop();
+    while(r.length>2 && opq(r[0])===0) r.shift();
     return r;
   },
   // Detecta capas SIN cabecera: tabla de offsets de filas (u32 monótonos, último
@@ -2042,7 +2387,7 @@ function shiftLoad(file){
     const d=new Uint8Array(e.target.result);
     const frames=MDL.decodeAll(d);
     if(!frames.length){ toast('No se encontraron capas',true); return; }
-    _shiftState={frames,active:0,shifts:frames.map(f=>MDL.autoShift(f.rows,f.width)),fileName:file.webkitRelativePath||file.name};
+    _shiftState={frames,active:0,shifts:frames.map(f=>MDL.bestShift(f.rows,f.width)),fileName:file.webkitRelativePath||file.name};
     $('shiftDrop').style.display='none';
     $('shiftWork').style.display='block';
     // Tabs de capas
@@ -2077,7 +2422,7 @@ function shiftUpdate(){ const i=_shiftState.active; _shiftState.shifts[i]=parseI
 function shiftSync(){ const i=_shiftState.active; _shiftState.shifts[i]=parseInt($('shiftNum').value)||0; $('shiftRange').value=_shiftState.shifts[i]; shiftRender(); }
 function shiftAuto(){
   const i=_shiftState.active, f=_shiftState.frames[i];
-  _shiftState.shifts[i]=MDL.autoShift(f.rows,f.width);
+  _shiftState.shifts[i]=MDL.bestShift(f.rows,f.width);
   $('shiftRange').value=_shiftState.shifts[i]; $('shiftNum').value=_shiftState.shifts[i]; shiftRender();
 }
 
@@ -2210,7 +2555,7 @@ $('btnExtractTool').onclick=()=>{
           for(const i of idx){
             let rows=MDL.trimEdgeRows(frames[i].rows);
             if(skipMask && !MDL.looksLikeImage(rows,frames[i].width)) continue;
-            const sh=MDL.autoShift(rows,frames[i].width);
+            const sh=MDL.bestShift(rows,frames[i].width);
             let cv=MDL.toCanvas(rows,frames[i].width,sh,crop);
             if(crack) cv=MDL.crackFill(cv,3,2);
             const rel = exported===0 ? relBase+'.png' : `${relBase}_L${i}.png`;
@@ -2319,13 +2664,12 @@ async function rcSave(){
 }
 function rcLoadAnother(){ $('rcWork').style.display='none'; $('rcDrop').style.display='block'; $('rcFile').value=''; _recolor.img=null; }
 
-// ============ PLACEHOLDERS para Resize/Move (UI futura) ============
+// ============ TAMAÑO (arrastre por esquinas) / MOVER ============
 $('btnResize').onclick=()=>{
   const o=obj(state.selObj);
-  if(!o){ toast('Selecciona un objeto primero',true); return; }
-  const nw=prompt('Nuevo ancho (px):',o.w); if(nw===null)return;
-  const nh=prompt('Nuevo alto (px):',o.h); if(nh===null)return;
-  pushUndo(); o.w=parseInt(nw)||o.w; o.h=parseInt(nh)||o.h; markDirty(); renderMinimap();
+  if(!o){ toast('Selecciona un objeto, luego arrastra una de sus esquinas',true); return; }
+  if(state.mode!=='place') setMode('place');
+  toast('Arrastra una esquina del objeto para cambiar el tamaño · Shift = libre (sin proporción)');
 };
 $('btnMove').onclick=()=>{ toast('Arrastra el objeto seleccionado en el lienzo para moverlo'); };
 </script>
