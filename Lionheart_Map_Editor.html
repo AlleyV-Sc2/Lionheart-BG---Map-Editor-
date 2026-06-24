@@ -155,6 +155,31 @@ input{font-family:inherit}
 .mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:8px 14px;font-size:13px;font-weight:600}
 .mtab[data-active="1"]{color:var(--gold);border-bottom-color:var(--gold)}
 .modal-body{overflow:auto;padding:20px 22px}
+/* Visualizador de contenido */
+.viewer-modal{width:min(1240px,97vw);height:90vh;max-height:90vh}
+.viewer-head{display:flex;align-items:center;gap:12px;padding:13px 16px 13px 18px;border-bottom:1px solid var(--line);flex:none}
+.viewer-title{font-weight:700;color:var(--gold);font-size:15px;white-space:nowrap}
+.viewer-head input{flex:1;max-width:360px;margin-left:auto;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--ink);font-size:13px}
+.viewer-body{flex:1;display:grid;grid-template-columns:290px 1fr;min-height:0;overflow:hidden}
+.viewer-tree{overflow:auto;border-right:1px solid var(--line);padding:8px 6px}
+.viewer-gridwrap{overflow:auto;padding:14px 16px}
+.viewer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:12px;align-content:start}
+.viewer-hint{color:var(--muted);font-size:13px;padding:24px;text-align:center}
+.vcard{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;transition:border-color .12s}
+.vcard:hover{border-color:var(--gold)}
+.vcard canvas{width:108px;height:96px;image-rendering:pixelated;background:#0c0e11;border-radius:4px}
+.vcard .vn{font-size:11px;color:#c8cfd8;text-align:center;word-break:break-word;line-height:1.25;max-height:42px;overflow:hidden}
+.vtf{padding:5px 8px;cursor:pointer;border-radius:5px;font-size:13px;display:flex;align-items:center;gap:6px;color:#c8cfd8;user-select:none}
+.vtf:hover{background:var(--panel2)}
+.vtf[data-active="1"]{background:rgba(232,181,75,.16);color:var(--gold)}
+.vtf .vbadge{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600}
+.vtf .varr{width:12px;display:inline-block;text-align:center;transition:transform .12s;color:var(--muted)}
+.vtf[data-open="1"] .varr{transform:rotate(90deg)}
+.vlightbox{position:absolute;inset:0;background:rgba(6,8,11,.92);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:5;padding:30px}
+.vlightbox.show{display:flex}
+.vlightbox canvas{max-width:100%;max-height:82%;image-rendering:pixelated;background:#0c0e11;border:1px solid var(--line);border-radius:6px}
+.vlightbox .vlname{color:var(--ink);font-size:13px;font-family:ui-monospace,monospace}
+.vlightbox .vlclose{position:absolute;top:14px;right:14px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;width:32px;height:32px;color:var(--muted);font-size:15px}
 .modal-body h2{color:var(--gold);font-size:17px;margin-bottom:4px}
 .modal-body h3{font-size:13px;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px;color:var(--gold-dim)}
 .modal-body p{line-height:1.6;color:#c8cfd8;margin-bottom:8px}
@@ -187,7 +212,7 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
   <div id="toolbar">
     <!-- Cargar Cache (primer icono) -->
     <div class="tb-group">
-      <button class="tb-btn icon" id="btnFolder" data-i18n-title="b_folder" title="Cargar carpeta Cache">🗂️</button>
+      <button class="tb-btn icon" id="btnFolder" data-i18n-title="b_folder" title="Cargar carpeta Data">🗂️</button>
     </div>
     <!-- Archivo -->
     <div class="tb-group">
@@ -216,6 +241,7 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
     <div class="tb-group">
       <button class="tb-btn icon mode-btn mode-paint" id="btnModePaint" data-i18n-title="b_terrain" title="Terreno">🖌️</button>
       <button class="tb-btn icon mode-btn mode-place" id="btnModePlace" data-active="1" data-i18n-title="b_objects" title="Objetos">🧩</button>
+      <button class="tb-btn icon" id="btnViewer" data-i18n-title="b_viewer" title="Visualizador — ver todo el contenido">🔭</button>
     </div>
     <!-- Herramientas MDL16 -->
     <div class="tb-group">
@@ -282,10 +308,10 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
         <p data-i18n-html="empty_p">Sigue estos pasos para cargar el contenido del juego:</p>
         <ol id="emptySteps" data-i18n-html="empty_steps" style="text-align:left;max-width:520px;margin:14px auto 4px;padding-left:22px;line-height:1.7;color:#c8cfd8;font-size:13.5px">
           <li>Descomprime el archivo <code>Data.dat</code> de tu directorio de instalación de <i>Lionheart</i>.</li>
-          <li>Pulsa el botón de abajo y selecciona la carpeta <code>Cache</code> (dentro de la carpeta <code>Data</code> que acabas de descomprimir).</li>
-          <li>Puedes añadir tus propias carpetas con archivos <code>.png</code> personalizados dentro de esa misma carpeta <code>Cache</code>; el editor también los cargará.</li>
+          <li>Pulsa el botón de abajo y selecciona la carpeta <code>Data</code> que acabas de descomprimir (la que contiene <code>Cache</code> dentro).</li>
+          <li>Puedes añadir tus propias carpetas con archivos <code>.png</code> personalizados dentro de esa carpeta <code>Data</code>; el editor también los cargará.</li>
         </ol>
-        <button class="big" id="btnFolder2" data-i18n="empty_btn">📁 Seleccionar carpeta Cache…</button>
+        <button class="big" id="btnFolder2" data-i18n="empty_btn">📁 Seleccionar carpeta Data…</button>
         <p style="font-size:11px" data-i18n="empty_note">Requiere Chrome o Edge. La carpeta se lee solo en tu equipo; nada se sube a ningún sitio.</p>
       </div>
     </div>
@@ -304,6 +330,26 @@ pre.code{background:#0d1014;border:1px solid var(--line);border-radius:8px;paddi
         <button class="mini-btn" id="btnNewGroup" data-i18n-title="t_newfolder" title="">📁＋</button>
       </div>
       <div id="objList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Content viewer modal ===== -->
+<div id="viewerModal" class="modal-bg">
+  <div class="modal viewer-modal">
+    <button class="modal-x" id="viewerClose">✕</button>
+    <div class="viewer-head">
+      <span class="viewer-title" id="viewerTitle">🔭 Visualizador de contenido</span>
+      <input id="viewerSearch" type="text" placeholder="Buscar archivo…  (escribe para filtrar en todo Data)">
+    </div>
+    <div class="viewer-body">
+      <div class="viewer-tree" id="viewerTree"></div>
+      <div class="viewer-gridwrap"><div class="viewer-grid" id="viewerGrid"></div></div>
+    </div>
+    <div class="vlightbox" id="vLightbox">
+      <button class="vlclose" id="vlClose">✕</button>
+      <canvas id="vlCanvas"></canvas>
+      <div class="vlname" id="vlName"></div>
     </div>
   </div>
 </div>
@@ -626,19 +672,19 @@ const T = {
     b_zax:"📜 Importar .zax", z_btn_title:"Cargar un mapa original de Lionheart (.zax)",
     z_loaded:"Mapa .zax cargado · {n} modelos · {t} texturas", z_models_only:"{n} modelos colocados (carga la carpeta Cache para ver las imágenes)",
     z_bad:"No parece un .zax válido (falta Width/Height)", z_nocache:"Primero carga la carpeta Cache para resolver los modelos y texturas", z_loading:"Cargando mapa .zax…",
-    b_terrain:"🖌️ Terreno", b_objects:"🧩 Objetos", b_folder:"📁 Cargar carpeta Cache…", b_credits:"ℹ️ Créditos", b_keys:"⌨️ Atajos de teclado",
+    b_terrain:"🖌️ Terreno", b_objects:"🧩 Objetos", b_folder:"📁 Cargar carpeta Data…", b_credits:"ℹ️ Créditos", b_keys:"⌨️ Atajos de teclado", b_viewer:"🔭 Visualizador",
     t_undo:"Deshacer (Ctrl+Z)", t_redo:"Rehacer (Ctrl+Y)", t_cut:"Cortar (Ctrl+X)", t_copy:"Copiar (Ctrl+C)", t_paste:"Pegar (Ctrl+V)",
     hint_paint:"Modo: Terreno — clic para pintar la textura seleccionada",
     hint_place:"Modo: Objetos — arrastra un .png al mapa; mueve y reordena con el ratón",
-    h_minimap:"Minimapa", h_files:"Archivos · arrastra al mapa", ph_search:"Buscar archivo…  (escribe para filtrar)", tree_empty:"Carga la carpeta Cache para ver texturas y objetos",
+    h_minimap:"Minimapa", h_files:"Archivos · arrastra al mapa", ph_search:"Buscar archivo…  (escribe para filtrar)", tree_empty:"Carga la carpeta Data para ver el contenido", tree_empty_tex:"No hay texturas en la carpeta Textures.\nCambia a modo Objetos o usa el Visualizador para ver el resto.", tree_empty_obj:"No hay objetos en Models\\Environments.\nCambia a modo Terreno o usa el Visualizador para ver el resto.",
     h_preview:"Previsualización", prev_empty:"Selecciona un archivo", h_objects:"Objetos en el mapa",
     h_layers:"Capas", t_newfolder:"Nueva carpeta", grp_name:"Carpeta", t_flipH:"Voltear horizontal (H)", t_flipV:"Voltear vertical (V)", t_bg:"Cambiar fondo (claro / cuadros / oscuro)",
     h_terr:"Capas de terreno", t_addterr:"Añadir capa (textura seleccionada)", t_needLayer:"Crea o selecciona una capa de terreno primero", terr_empty:"Sin capas de terreno.\nElige una textura en Archivos y pulsa ➕ (o arrástrala al mapa).", terr_opacity:"Opacidad de la capa", u_layer:"capa", u_layers:"capas",
     bb_brush:"Pincel", bb_eraser:"Borrador", bb_size:"Tamaño", bb_soft:"Difuminado", bb_flow:"Flujo", bb_fill:"Rellenar capa", bb_clear:"Vaciar capa", bb_hint:"Pinta sobre la capa activa para mezclar · [ ] tamaño · B/E pincel/borrador",
     empty_h:"Editor de mapas para Infinity Engine",
     empty_p:"Sigue estos pasos para cargar el contenido del juego:",
-    empty_steps:"<li>Descomprime el archivo <code>Data.dat</code> de tu directorio de instalación de <i>Lionheart</i>.</li><li>Pulsa el botón de abajo y selecciona la carpeta <code>Cache</code> (dentro de la carpeta <code>Data</code> que acabas de descomprimir).</li><li>Puedes añadir tus propias carpetas con archivos <code>.png</code> personalizados dentro de esa misma carpeta <code>Cache</code>; el editor también los cargará.</li>",
-    empty_btn:"📁 Seleccionar carpeta Cache…",
+    empty_steps:"<li>Descomprime el archivo <code>Data.dat</code> de tu directorio de instalación de <i>Lionheart</i>.</li><li>Pulsa el botón de abajo y selecciona la carpeta <code>Data</code> que acabas de descomprimir (la que contiene <code>Cache</code> dentro).</li><li>Puedes añadir tus propias carpetas con archivos <code>.png</code> personalizados dentro de esa carpeta <code>Data</code>; el editor también los cargará.</li>",
+    empty_btn:"📁 Seleccionar carpeta Data…",
     empty_note:"Requiere Chrome o Edge. La carpeta se lee solo en tu equipo; nada se sube a ningún sitio.",
     u_tiles:"tiles", u_zoom:"zoom", u_cell:"celda", u_sel:"sel",
     prev_tex:"🟩 Textura · {n}", prev_obj:"🟦 Objeto · {n}",
@@ -679,19 +725,19 @@ const T = {
     b_zax:"📜 Import .zax", z_btn_title:"Load an original Lionheart map (.zax)",
     z_loaded:"Loaded .zax · {n} models · {t} textures", z_models_only:"{n} models placed (load the Cache folder to see the images)",
     z_bad:"Not a valid .zax (missing Width/Height)", z_nocache:"Load the Cache folder first to resolve models and textures", z_loading:"Loading .zax map…",
-    b_terrain:"🖌️ Terrain", b_objects:"🧩 Objects", b_folder:"📁 Load Cache folder…", b_credits:"ℹ️ Credits", b_keys:"⌨️ Keyboard shortcuts",
+    b_terrain:"🖌️ Terrain", b_objects:"🧩 Objects", b_folder:"📁 Load Data folder…", b_credits:"ℹ️ Credits", b_keys:"⌨️ Keyboard shortcuts", b_viewer:"🔭 Content viewer",
     t_undo:"Undo (Ctrl+Z)", t_redo:"Redo (Ctrl+Y)", t_cut:"Cut (Ctrl+X)", t_copy:"Copy (Ctrl+C)", t_paste:"Paste (Ctrl+V)",
     hint_paint:"Mode: Terrain — click to paint the selected texture",
     hint_place:"Mode: Objects — drag a .png onto the map; move and reorder with the mouse",
-    h_minimap:"Minimap", h_files:"Files · drag onto the map", ph_search:"Search file…  (type to filter)", tree_empty:"Load the Cache folder to see textures and objects",
+    h_minimap:"Minimap", h_files:"Files · drag onto the map", ph_search:"Search file…  (type to filter)", tree_empty:"Load the Data folder to see the content", tree_empty_tex:"No textures in the Textures folder.\nSwitch to Objects mode or use the Viewer to see the rest.", tree_empty_obj:"No objects in Models\\Environments.\nSwitch to Terrain mode or use the Viewer to see the rest.",
     h_preview:"Preview", prev_empty:"Select a file", h_objects:"Objects on the map",
     h_layers:"Layers", t_newfolder:"New folder", grp_name:"Folder", t_flipH:"Flip horizontal (H)", t_flipV:"Flip vertical (V)", t_bg:"Change background (light / checker / dark)",
     h_terr:"Terrain layers", t_addterr:"Add layer (selected texture)", t_needLayer:"Create or select a terrain layer first", terr_empty:"No terrain layers.\nPick a texture in Files and press ➕ (or drag it onto the map).", terr_opacity:"Layer opacity", u_layer:"layer", u_layers:"layers",
     bb_brush:"Brush", bb_eraser:"Eraser", bb_size:"Size", bb_soft:"Softness", bb_flow:"Flow", bb_fill:"Fill layer", bb_clear:"Clear layer", bb_hint:"Paint on the active layer to blend · [ ] size · B/E brush/eraser",
     empty_h:"Map editor for the Infinity Engine",
     empty_p:"Follow these steps to load the game content:",
-    empty_steps:"<li>Unpack the <code>Data.dat</code> file from your <i>Lionheart</i> install directory.</li><li>Click the button below and select the <code>Cache</code> folder (inside the <code>Data</code> folder you just unpacked).</li><li>You can add your own folders with custom <code>.png</code> files inside that same <code>Cache</code> folder; the editor will load them too.</li>",
-    empty_btn:"📁 Select Cache folder…",
+    empty_steps:"<li>Unpack the <code>Data.dat</code> file from your <i>Lionheart</i> install directory.</li><li>Click the button below and select the <code>Data</code> folder you just unpacked (the one that contains <code>Cache</code> inside).</li><li>You can add your own folders with custom <code>.png</code> files inside that <code>Data</code> folder; the editor will load them too.</li>",
+    empty_btn:"📁 Select Data folder…",
     empty_note:"Requires Chrome or Edge. The folder is read only on your computer; nothing is uploaded.",
     u_tiles:"tiles", u_zoom:"zoom", u_cell:"cell", u_sel:"sel",
     prev_tex:"🟩 Texture · {n}", prev_obj:"🟦 Object · {n}",
@@ -812,20 +858,24 @@ function buildTree(){
 function renderTree(filter){
   const host=$('tree'); host.innerHTML='';
   if(!state.tree){ const d=document.createElement('div'); d.className='terr-empty'; d.textContent=t('tree_empty'); host.appendChild(d); return; }
+  if(countFiles(state.tree)===0){ const d=document.createElement('div'); d.className='terr-empty'; d.textContent = state.mode==='paint' ? t('tree_empty_tex') : t('tree_empty_obj'); host.appendChild(d); return; }
   host.appendChild(renderNode(state.tree, 0, (filter||'').trim().toLowerCase(), true));
 }
-function activeKind(){ return state.mode==='paint' ? 'tex' : 'obj'; }
+// Qué archivos muestra cada modo: Terreno → carpeta Textures · Objetos → carpeta Models/Environments
+function modeShows(fl){
+  const p='/'+(fl.key||'').replace(/\\/g,'/').toLowerCase();
+  return state.mode==='paint' ? p.includes('/textures/') : p.includes('/environments/');
+}
 function renderNode(node, depth, filter, isRoot){
   const frag=document.createDocumentFragment();
-  const kind=activeKind();
   const dirs=[...node.dirs.values()].sort((a,b)=>a.name.localeCompare(b.name));
   for(const d of dirs){
-    if(countFiles(d,kind)===0) continue;
-    if(filter && !subtreeMatches(d,filter,kind)) continue;
+    if(countFiles(d)===0) continue;
+    if(filter && !subtreeMatches(d,filter)) continue;
     const wrap=document.createElement('div');
     const row=document.createElement('div'); row.className='tfolder';
     if(filter||isRoot) row.classList.add('open');
-    row.innerHTML=`<span class="arr">▶</span><span class="fname">📁 ${esc(d.name)}</span><span class="badge">${countFiles(d,kind)}</span>`;
+    row.innerHTML=`<span class="arr">▶</span><span class="fname">📁 ${esc(d.name)}</span><span class="badge">${countFiles(d)}</span>`;
     const kids=document.createElement('div'); kids.className='tchildren';
     if(!(filter||isRoot)) kids.style.display='none';
     kids.appendChild(renderNode(d, depth+1, filter, false));
@@ -834,7 +884,7 @@ function renderNode(node, depth, filter, isRoot){
   }
   const files=[...node.files].sort((a,b)=>a.name.localeCompare(b.name));
   for(const fl of files){
-    if(fl.kind!==kind) continue;
+    if(!modeShows(fl)) continue;
     if(filter && !fl.name.toLowerCase().includes(filter)) continue;
     const el=document.createElement('div'); el.className='tfile'; el.draggable=true; el.dataset.key=fl.key;
     el.innerHTML=`<span class="dot ${fl.kind==='tex'?'tex':'obj'}"></span><span class="lbl">${esc(fl.name.replace(/\.png$/i,''))}</span>`;
@@ -844,14 +894,14 @@ function renderNode(node, depth, filter, isRoot){
   }
   const box=document.createElement('div'); box.appendChild(frag); return box;
 }
-function subtreeMatches(node,filter,kind){
-  for(const fl of node.files) if(fl.kind===kind && fl.name.toLowerCase().includes(filter)) return true;
-  for(const d of node.dirs.values()) if(subtreeMatches(d,filter,kind)) return true;
+function subtreeMatches(node,filter){
+  for(const fl of node.files) if(modeShows(fl) && fl.name.toLowerCase().includes(filter)) return true;
+  for(const d of node.dirs.values()) if(subtreeMatches(d,filter)) return true;
   return false;
 }
-function countFiles(node,kind){
-  let n=0; for(const fl of node.files) if(fl.kind===kind) n++;
-  for(const d of node.dirs.values()) n+=countFiles(d,kind); return n;
+function countFiles(node){
+  let n=0; for(const fl of node.files) if(modeShows(fl)) n++;
+  for(const d of node.dirs.values()) n+=countFiles(d); return n;
 }
 $('search').addEventListener('input', e=> renderTree(e.target.value));
 
@@ -937,12 +987,12 @@ function getImage(key){
   if(isFrm16Key(key)){                                       // FRM16 → decodificar a canvas
     info.file.arrayBuffer().then(buf=>{
       try{ const cv=FRM16.decode(new Uint8Array(buf)); if(cv) state.imgCache.set(key,cv); }catch(e){}
-      state.pending.delete(key); markDirty(); renderMinimap(); onTexLoaded(key);
+      state.pending.delete(key); markDirty(); renderMinimap(); onTexLoaded(key); refreshThumbs(key);
     }).catch(()=>state.pending.delete(key));
     return null;
   }
   const img=new Image();
-  img.onload=()=>{ state.imgCache.set(key,img); state.pending.delete(key); markDirty(); renderMinimap(); onTexLoaded(key); };
+  img.onload=()=>{ state.imgCache.set(key,img); state.pending.delete(key); markDirty(); renderMinimap(); onTexLoaded(key); refreshThumbs(key); };
   img.onerror=()=>state.pending.delete(key);
   img.src=URL.createObjectURL(info.file);
   return null;
@@ -1376,7 +1426,7 @@ function makeObjRow(o){
   if(!effVisible(o)) row.classList.add('hid');
   const eye=document.createElement('span'); eye.className='eye'+(o.visible===false?' off':''); eye.textContent='👁';
   eye.title='Mostrar / ocultar'; eye.onclick=ev=>{ ev.stopPropagation(); toggleObjVis(o.id); };
-  const thumb=document.createElement('canvas'); thumb.width=24; thumb.height=24; drawThumb(thumb,o.path);
+  const thumb=document.createElement('canvas'); thumb.width=24; thumb.height=24; thumb.className='thumb'; thumb.dataset.key=o.path; drawThumb(thumb,o.path);
   const name=document.createElement('div'); name.className='on'; name.textContent=info?info.name:o.path.split('\\').pop();
   const del=document.createElement('button'); del.className='del'; del.textContent='🗑';
   del.onclick=ev=>{ ev.stopPropagation(); deleteObject(o.id); };
@@ -1443,7 +1493,7 @@ function setObjGroup(objId, gid){
     if(members.length) arr.splice(arr.indexOf(members[members.length-1])+1,0,o);
     else arr.push(o);
   }
-  renderObjList(); markDirty(); renderMinimap();
+  markDirty(); renderMinimap(); deferRenderObjList();
 }
 function editGroupName(span, g){
   span.contentEditable='true'; span.focus();
@@ -1455,6 +1505,11 @@ function editGroupName(span, g){
 }
 
 /* reorder in z (and inherit drop target's folder) */
+// Reconstruir el panel DENTRO del evento drop (innerHTML='') destruye el elemento que maneja
+// el evento y el origen del arrastre en pleno drag → Chromium puede colapsar. Lo aplazamos un tick:
+// el drag termina sobre el DOM existente (dragend limpia reorderId) y luego se reconstruye.
+let _reRObj=0;
+function deferRenderObjList(){ if(_reRObj) return; _reRObj=setTimeout(()=>{ _reRObj=0; renderObjList(); },0); }
 function dropOnObject(dragId, targetId, after){
   if(dragId===targetId) return;
   const arr=state.map.objects;
@@ -1465,18 +1520,26 @@ function dropOnObject(dragId, targetId, after){
   arr.splice(arr.indexOf(dragged),1);
   const ti=arr.indexOf(target);
   arr.splice(after?ti:ti+1, 0, dragged);     // "after"=below target visually=lower z
-  renderObjList(); markDirty(); renderMinimap();
+  markDirty(); renderMinimap(); deferRenderObjList();
 }
 $('btnNewGroup').onclick=newGroup;
 
 function drawThumb(canvas, key){
-  const c=canvas.getContext('2d'), img=getImage(key);
-  const paint=()=>{ const im=state.imgCache.get(key); if(!im)return;
-    const s=Math.min(canvas.width/im.naturalWidth, canvas.height/im.naturalHeight);
-    const w=im.naturalWidth*s, h=im.naturalHeight*s;
+  const c=canvas.getContext('2d');
+  const paint=(im)=>{ if(!im)return; const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height; if(!iw||!ih)return;
+    const s=Math.min(canvas.width/iw, canvas.height/ih), w=iw*s, h=ih*s;
     c.clearRect(0,0,canvas.width,canvas.height); c.drawImage(im,(canvas.width-w)/2,(canvas.height-h)/2,w,h); };
-  if(img) paint();
-  else { const info=state.files.get(key); if(info){ const p=new Image(); p.onload=()=>{ state.imgCache.set(key,p); paint(); }; p.src=URL.createObjectURL(info.file); } }
+  if(isMdlKey(key)){                       // MDL16 → decodificador de objetos (capa más densa)
+    const im=mdlObjImage({path:key, layer:0, shift:null});
+    if(im) paint(im); else ensureMdl(key).then(()=>{ const im2=mdlObjImage({path:key, layer:0, shift:null}); if(im2) paint(im2); });
+    return;
+  }
+  const img=getImage(key);                 // FRM16 → canvas · PNG → Image (ambos cacheados; refreshThumbs repinta al cargar)
+  if(img) paint(img);
+}
+// Repinta las miniaturas (panel de capas y visualizador) que usan esta clave al terminar de cargar/decodificar
+function refreshThumbs(key){
+  document.querySelectorAll('canvas.thumb').forEach(cv=>{ if(cv.dataset.key===key) drawThumb(cv,key); });
 }
 function deleteObject(id){
   pushUndo();
@@ -1811,6 +1874,78 @@ function renderKeys(){
 $('btnKeys').onclick=()=>{ renderKeys(); $('keysModal').classList.add('show'); };
 $('keysClose').onclick=()=> $('keysModal').classList.remove('show');
 $('keysModal').addEventListener('click', e=>{ if(e.target===$('keysModal')) $('keysModal').classList.remove('show'); });
+
+/* ===== Visualizador de contenido — ve TODO lo que hay en la carpeta Data ===== */
+let viewerSel=null;
+function vCountAll(node){ let n=node.files.length; for(const d of node.dirs.values()) n+=vCountAll(d); return n; }
+function openViewer(){
+  if(!state.tree || vCountAll(state.tree)===0){ toast(state.lang==='en'?'Load the Data folder first':'Carga primero la carpeta Data', true); return; }
+  $('viewerTitle').textContent = state.lang==='en' ? '🔭 Content viewer' : '🔭 Visualizador de contenido';
+  $('viewerSearch').placeholder = state.lang==='en' ? 'Search file…  (type to filter across Data)' : 'Buscar archivo…  (escribe para filtrar en todo Data)';
+  $('viewerSearch').value='';
+  $('vLightbox').classList.remove('show');
+  $('viewerModal').classList.add('show');
+  renderViewerTree();
+  selectViewerFolder(state.tree);
+}
+function renderViewerTree(){ const host=$('viewerTree'); host.innerHTML=''; host.appendChild(viewerNode(state.tree,0)); }
+function viewerNode(node, depth){
+  const frag=document.createDocumentFragment();
+  const dirs=[...node.dirs.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  for(const d of dirs){
+    const cnt=vCountAll(d); if(cnt===0) continue;
+    const hasKids=[...d.dirs.values()].some(x=>vCountAll(x)>0);
+    const row=document.createElement('div'); row.className='vtf'; row.style.paddingLeft=(8+depth*14)+'px';
+    row.innerHTML=`<span class="varr">${hasKids?'▶':''}</span><span>📁 ${esc(d.name)}</span><span class="vbadge">${cnt}</span>`;
+    const kids=document.createElement('div'); kids.style.display='none';
+    if(hasKids) kids.appendChild(viewerNode(d, depth+1));
+    row.onclick=()=>{
+      document.querySelectorAll('#viewerTree .vtf[data-active="1"]').forEach(n=>n.dataset.active='0');
+      row.dataset.active='1';
+      selectViewerFolder(d);
+      if(hasKids){ const open=row.dataset.open!=='1'; row.dataset.open=open?'1':'0'; kids.style.display=open?'':'none'; }
+    };
+    frag.appendChild(row); frag.appendChild(kids);
+  }
+  return frag;
+}
+function viewerCard(fl){
+  const card=document.createElement('div'); card.className='vcard';
+  const cv=document.createElement('canvas'); cv.width=108; cv.height=96; cv.className='thumb'; cv.dataset.key=fl.key;
+  drawThumb(cv, fl.key);
+  const nm=document.createElement('div'); nm.className='vn'; nm.textContent=fl.name;
+  card.append(cv,nm);
+  card.onclick=()=> viewerLightbox(fl.key, fl.name);
+  return card;
+}
+function viewerFill(list){
+  const grid=$('viewerGrid'); grid.innerHTML='';
+  if(!list.length){ const h=document.createElement('div'); h.className='viewer-hint'; h.style.gridColumn='1/-1'; h.textContent=state.lang==='en'?'Nothing here. Open a subfolder.':'Aquí no hay archivos. Abre una subcarpeta.'; grid.appendChild(h); return; }
+  const cap=600;
+  list.slice(0,cap).forEach(fl=> grid.appendChild(viewerCard(fl)));
+  if(list.length>cap){ const h=document.createElement('div'); h.className='viewer-hint'; h.style.gridColumn='1/-1'; h.textContent=(state.lang==='en'?`… and ${list.length-cap} more (showing ${cap}).`:`… y ${list.length-cap} más (mostrando ${cap}).`); grid.appendChild(h); }
+}
+function selectViewerFolder(node){ viewerSel=node; viewerFill([...node.files].sort((a,b)=>a.name.localeCompare(b.name))); }
+function viewerSearch(q){
+  q=(q||'').trim().toLowerCase();
+  if(!q){ selectViewerFolder(viewerSel||state.tree); return; }
+  const res=[]; const walk=n=>{ for(const fl of n.files) if(fl.name.toLowerCase().includes(q)) res.push(fl); for(const d of n.dirs.values()) walk(d); };
+  walk(state.tree); res.sort((a,b)=>a.name.localeCompare(b.name)); viewerFill(res);
+}
+function viewerLightbox(key, name){
+  const lb=$('vLightbox'), c=$('vlCanvas'); $('vlName').textContent=name;
+  const draw=im=>{ if(!im)return; const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height; if(!iw||!ih)return; c.width=iw; c.height=ih; c.getContext('2d').drawImage(im,0,0); };
+  c.width=1; c.height=1;
+  if(isMdlKey(key)){ const im=mdlObjImage({path:key,layer:0,shift:null}); if(im) draw(im); else ensureMdl(key).then(()=>draw(mdlObjImage({path:key,layer:0,shift:null}))); }
+  else { const im=getImage(key); if(im) draw(im); else { const iv=setInterval(()=>{ const im2=state.imgCache.get(key); if(im2){ clearInterval(iv); draw(im2); } },120); setTimeout(()=>clearInterval(iv),5000); } }
+  lb.classList.add('show');
+}
+$('btnViewer').onclick=openViewer;
+$('viewerClose').onclick=()=> $('viewerModal').classList.remove('show');
+$('viewerModal').addEventListener('click', e=>{ if(e.target===$('viewerModal')) $('viewerModal').classList.remove('show'); });
+$('vlClose').onclick=()=> $('vLightbox').classList.remove('show');
+$('vLightbox').addEventListener('click', e=>{ if(e.target===$('vLightbox')) $('vLightbox').classList.remove('show'); });
+$('viewerSearch').addEventListener('input', e=> viewerSearch(e.target.value));
 $('modalClose').onclick=()=> $('modal').classList.remove('show');
 $('modal').addEventListener('click', e=>{ if(e.target===$('modal')) $('modal').classList.remove('show'); });
 document.querySelectorAll('.mtab').forEach(tb=>tb.onclick=()=>{
