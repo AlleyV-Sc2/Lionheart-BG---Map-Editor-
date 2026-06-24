@@ -953,7 +953,7 @@ const FRM16 = {
       if(!frames.length) return null;
       frames.sort((a,b)=>b.opaque-a.opaque);
       const f=frames[0], rows=MDL.trimEdgeRows(f.rows), sh=MDL.bestShift(rows,f.width);
-      return MDL.toCanvas(rows,f.width,sh,true);
+      const cv=MDL.toCanvas(rows,f.width,sh,true); if(mdlClean) MDL.cleanLines(cv); return cv;
     }
     if(d[0]!==0x32 || d[1]!==0x10){
       // contenedor (SEQ16 u otro envoltorio): buscar un frame 01 32 10 embebido
@@ -1016,6 +1016,7 @@ function ensureLoaded(keys){
 /* ============================================================ OBJETOS MDL16 (capas + shift en vivo) */
 const mdlData = new Map();   // key -> {frames:[{width,height,rows,opaque,shift}]}
 const mdlPix  = new Map();   // "key|layer|shift" -> canvas
+let mdlClean = true;         // limpiar líneas de geometría (telaraña) en sprites MDL16
 function isMdlKey(key){ const i=state.files.get(key); return !!(i && (i.mdl || /\.mdl16$/i.test(i.name||''))); }
 async function ensureMdl(key){
   if(mdlData.has(key)) return mdlData.get(key);
@@ -1034,9 +1035,10 @@ async function ensureMdl(key){
 function mdlPixCanvas(key,layer,shift){
   const e=mdlData.get(key); if(!e||!e.frames[layer]) return null;
   const f=e.frames[layer]; const W=f.width; const sh=((shift%W)+W)%W;
-  const ck=key+'|'+layer+'|'+sh;
+  const ck=key+'|'+layer+'|'+sh+(mdlClean?'|k':'');
   if(mdlPix.has(ck)) return mdlPix.get(ck);
   const cv=MDL.toCanvas(f.rows,W,sh,false);   // SIN recortar → tamaño estable al ajustar shift
+  if(mdlClean) MDL.cleanLines(cv);            // quita la telaraña de geometría (1px)
   mdlPix.set(ck,cv); return cv;
 }
 // imagen lista para un objeto MDL (o null si aún decodificando)
@@ -1809,6 +1811,7 @@ const KEYBINDINGS = {
       ['Ctrl + Y','Rehacer'],
       ['Ctrl + C / X / V','Copiar / Cortar / Pegar'],
       ['Ctrl + S','Guardar el mapa'],
+      ['L','Limpiar líneas de geometría de los MDL16 (on/off)'],
     ]},
     {g:'Modo Terreno (pincel)', items:[
       ['B','Pincel'],
@@ -1837,6 +1840,7 @@ const KEYBINDINGS = {
       ['Ctrl + Y','Redo'],
       ['Ctrl + C / X / V','Copy / Cut / Paste'],
       ['Ctrl + S','Save the map'],
+      ['L','Clean MDL16 geometry lines (on/off)'],
     ]},
     {g:'Terrain mode (brush)', items:[
       ['B','Brush'],
@@ -1967,6 +1971,7 @@ window.addEventListener('keydown', e=>{
   if(ctrl&&e.key.toLowerCase()==='x'){ e.preventDefault(); $('btnCut').click(); return; }
   if(ctrl&&e.key.toLowerCase()==='v'){ e.preventDefault(); $('btnPaste').click(); return; }
   if(ctrl&&e.key.toLowerCase()==='s'){ e.preventDefault(); $('btnSave').click(); return; }
+  if((e.key==='l'||e.key==='L') && !ctrl){ mdlClean=!mdlClean; mdlPix.clear(); state.imgCache.clear(); markDirty(); renderObjList(); toast(mdlClean?'Limpieza de líneas MDL16: ON':'Limpieza de líneas MDL16: OFF'); e.preventDefault(); return; }
   if(state.mode==='paint'){
     if(e.key==='['||e.key===']'){ const f=e.key===']'?1.15:1/1.15; brush.size=Math.max(8,Math.min(420,Math.round(brush.size*f))); $('bbSize').value=brush.size; $('bbSizeV').textContent=brush.size; markDirty(); e.preventDefault(); return; }
     if(e.key==='b'||e.key==='B'){ $('bbBrush').onclick(); e.preventDefault(); return; }
@@ -2179,7 +2184,33 @@ const MDL = {
     ctx.putImageData(img,0,0);
     return canvas;
   },
-  // Recorta la línea negra/colores espuria que aparece debajo del dibujo (resto de
+  // Elimina las LÍNEAS FINAS de geometría/wireframe (1px) que ensucian muchos MDL16,
+  // sin encoger la silueta del sprite: APERTURA MORFOLÓGICA del canal alfa
+  // (erosión 3×3 "todos los vecinos" + dilatación, conservando solo píxeles originales).
+  cleanLines(canvas){
+    const W=canvas.width, H=canvas.height; if(W<3||H<3) return canvas;
+    const ctx=canvas.getContext('2d'); const img=ctx.getImageData(0,0,W,H); const d=img.data;
+    const A=new Uint8Array(W*H); for(let i=0;i<W*H;i++) A[i]=d[i*4+3]>0?1:0;
+    const idx=(x,y)=>y*W+x;
+    // erosión: sobrevive solo con los 8 vecinos opacos (los píxeles de línea, con ≤2, caen)
+    const E=new Uint8Array(W*H);
+    for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+      if(!A[idx(x,y)]) continue;
+      if(A[idx(x-1,y-1)]&&A[idx(x,y-1)]&&A[idx(x+1,y-1)]&&A[idx(x-1,y)]&&A[idx(x+1,y)]&&A[idx(x-1,y+1)]&&A[idx(x,y+1)]&&A[idx(x+1,y+1)]) E[idx(x,y)]=1;
+    }
+    // dilatación: recupera el borde (solo donde había opaco original) → silueta intacta, líneas no
+    const keep=new Uint8Array(W*H);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      if(!A[idx(x,y)]) continue;
+      if(E[idx(x,y)]){ keep[idx(x,y)]=1; continue; }
+      let f=false;
+      for(let dy=-1;dy<=1&&!f;dy++)for(let dx=-1;dx<=1;dx++){ const xx=x+dx,yy=y+dy; if(xx<0||yy<0||xx>=W||yy>=H)continue; if(E[idx(xx,yy)]){f=true;break;} }
+      if(f) keep[idx(x,y)]=1;
+    }
+    for(let i=0;i<W*H;i++){ if(A[i] && !keep[i]) d[i*4+3]=0; }
+    ctx.putImageData(img,0,0);
+    return canvas;
+  },
   // tabla u otra capa). SEGURO y dirigido: solo quita una línea OSCURA repentina
   // (la de encima no era oscura) o una fila densa justo tras un hueco vacío. Tope bajo.
   trimEdgeRows(rows){
@@ -2692,6 +2723,7 @@ $('btnExtractTool').onclick=()=>{
             if(skipMask && !MDL.looksLikeImage(rows,frames[i].width)) continue;
             const sh=MDL.bestShift(rows,frames[i].width);
             let cv=MDL.toCanvas(rows,frames[i].width,sh,crop);
+            if(mdlClean) MDL.cleanLines(cv);
             if(crack) cv=MDL.crackFill(cv,3,2);
             const rel = exported===0 ? relBase+'.png' : `${relBase}_L${i}.png`;
             await saveCv(cv, rel); exported++; pngs++;
