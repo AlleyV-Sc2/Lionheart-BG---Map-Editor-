@@ -11,8 +11,8 @@ I have added tools for refining objects on the map (see the keyboard shortcuts s
 Follow these steps to load the game content:
 
 1. Unpack the Data.dat file from your Lionheart install directory.
-2. Slect button Select Cache folder ... and select the Cache folder (inside the Data folder youjust unpacked).
-3. You can add your own folders with custom folder; the editor will load them too .png files inside that same Cache
+2. Slect button Select Data folder ... and select the Data folder.
+3. You can add your own folders with custom folder; the editor will load them too .png files inside that same Data folder.
 
 4-Opcional download the cache folder from my Google Drive (all PNG contents) [Cache](https://drive.google.com/file/d/1UzN_TL-HNgncYZ7H7IWiDISJIhE-dDFn/view?usp=sharing)
 
