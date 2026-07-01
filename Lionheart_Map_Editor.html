@@ -948,32 +948,34 @@ const FRM16 = {
   //  · magic 32 10, flags 0x0044 → comprimido (RLE en offset 40, SIN shift, con transparencia)
   decode(d){
     if(!d || d.length<16) return null;
-    if(d[0]===0x01 && d[1]===0x32 && d[2]===0x10){           // variante MDL16
+    // frame(s) embebido(s) en MDL16: 01 32 10
+    if(d[0]===0x01 && d[1]===0x32 && d[2]===0x10){
       const frames=MDL.decodeAll(d).filter(f=>f.opaque>0);
       if(!frames.length) return null;
       frames.sort((a,b)=>b.opaque-a.opaque);
-      const f=frames[0], rows=MDL.trimEdgeRows(f.rows), sh=MDL.bestShift(rows,f.width);
-      const cv=MDL.toCanvas(rows,f.width,sh,true); if(mdlClean) MDL.cleanLines(cv); return cv;
+      return MDL.toCanvas(frames[0].rows,frames[0].width,0,true);   // sin shift: la tabla coloca cada fila
     }
-    if(d[0]!==0x32 || d[1]!==0x10){
-      // contenedor (SEQ16 u otro envoltorio): buscar un frame 01 32 10 embebido
-      const frames=MDL.decodeAll(d).filter(f=>f.opaque>0);
-      if(frames.length){ frames.sort((a,b)=>b.opaque-a.opaque); const f=frames[0]; const sh=MDL.bestShift(f.rows,f.width); return MDL.toCanvas(f.rows,f.width,sh,false); }
-      return null;
-    }
-    const w=d[6]|(d[7]<<8), h=d[8]|(d[9]<<8);
-    if(w<1||h<1||w>8192||h>8192) return null;
-    const flags=d[12]|(d[13]<<8);
-    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
-    const ctx=cv.getContext('2d'), img=ctx.createImageData(w,h), o=img.data;
-    const put=(idx,v)=>{ o[idx]=((v>>11)&31)*255/31; o[idx+1]=((v>>5)&63)*255/63; o[idx+2]=(v&31)*255/31; o[idx+3]=255; };
-    if(flags & 0x04){                                        // comprimido (RLE, sin shift)
-      const rows=MDL.decodeByHeight(d,40,w,h);
-      for(let y=0;y<h;y++){ const row=rows[y]; for(let x=0;x<w;x++){ const v=row[x]; if(v!==null&&v!==0xFFFF) put((y*w+x)*4,v); } }
-    } else {                                                 // RAW (RGB565 crudo)
+    // FRM16 suelto: 32 10
+    if(d[0]===0x32 && d[1]===0x10){
+      const flags=d[12]|(d[13]<<8);
+      if(flags & 0x04){                                       // comprimido (RLE + capas + tablas)
+        const fr=MDL.decodeFrameComposite(d,0);
+        if(fr && fr.opaque>0) return MDL.toCanvas(fr.rows,fr.width,0,true);
+        return null;
+      }
+      // RAW (RGB565 crudo en offset 32) — texturas de terreno
+      const w=d[6]|(d[7]<<8), h=d[8]|(d[9]<<8);
+      if(w<1||h<1||w>8192||h>8192) return null;
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      const ctx=cv.getContext('2d'), img=ctx.createImageData(w,h), o=img.data;
+      const put=(idx,v)=>{ o[idx]=((v>>11)&31)*255/31; o[idx+1]=((v>>5)&63)*255/63; o[idx+2]=(v&31)*255/31; o[idx+3]=255; };
       for(let i=0;i<w*h;i++){ const p=32+i*2; if(p+1<d.length) put(i*4, d[p]|(d[p+1]<<8)); }
+      ctx.putImageData(img,0,0); return cv;
     }
-    ctx.putImageData(img,0,0); return cv;
+    // contenedor (SEQ16 u otro envoltorio): buscar frames 01 32 10 embebidos
+    const frames=MDL.decodeAll(d).filter(f=>f.opaque>0);
+    if(frames.length){ frames.sort((a,b)=>b.opaque-a.opaque); return MDL.toCanvas(frames[0].rows,frames[0].width,0,false); }
+    return null;
   }
 };
 function isFrm16Key(key){ const i=state.files.get(key); return !!(i && (i.frm16 || i.seq16 || /\.(frm16|seq16)$/i.test(i.rel||''))); }
@@ -1016,7 +1018,6 @@ function ensureLoaded(keys){
 /* ============================================================ OBJETOS MDL16 (capas + shift en vivo) */
 const mdlData = new Map();   // key -> {frames:[{width,height,rows,opaque,shift}]}
 const mdlPix  = new Map();   // "key|layer|shift" -> canvas
-let mdlClean = true;         // limpiar líneas de geometría (telaraña) en sprites MDL16
 function isMdlKey(key){ const i=state.files.get(key); return !!(i && (i.mdl || /\.mdl16$/i.test(i.name||''))); }
 async function ensureMdl(key){
   if(mdlData.has(key)) return mdlData.get(key);
@@ -1024,10 +1025,9 @@ async function ensureMdl(key){
   try{
     const d=new Uint8Array(await info.file.arrayBuffer());
     let frames=MDL.decodeAll(d).filter(f=>f.opaque>0);
-    frames.forEach(f=>{ f.rows=MDL.trimEdgeRows(f.rows); });
-    // imagen-like primero, ordenadas por densidad (la principal primero)
+    // la principal (más opaca) primero
     frames.sort((a,b)=>b.opaque-a.opaque);
-    frames.forEach(f=>{ f.shift=MDL.bestShift(f.rows,f.width); });
+    frames.forEach(f=>{ f.shift=0; });   // sin shift: la tabla de filas ya coloca cada fila
     const e={frames};
     mdlData.set(key,e); return e;
   }catch(err){ mdlData.set(key,{frames:[]}); return mdlData.get(key); }
@@ -1035,10 +1035,38 @@ async function ensureMdl(key){
 function mdlPixCanvas(key,layer,shift){
   const e=mdlData.get(key); if(!e||!e.frames[layer]) return null;
   const f=e.frames[layer]; const W=f.width; const sh=((shift%W)+W)%W;
-  const ck=key+'|'+layer+'|'+sh+(mdlClean?'|k':'');
+  const ck=key+'|'+layer+'|'+sh;
   if(mdlPix.has(ck)) return mdlPix.get(ck);
   const cv=MDL.toCanvas(f.rows,W,sh,false);   // SIN recortar → tamaño estable al ajustar shift
-  if(mdlClean) MDL.cleanLines(cv);            // quita la telaraña de geometría (1px)
+  mdlPix.set(ck,cv); return cv;
+}
+// Compone TODOS los frames del MDL en una imagen, como el juego (objeto + sombra + silueta).
+// El lienzo abarca el BOUNDING BOX de todos los frames (alineados por posX/posY), de modo que
+// las sombras/iluminaciones que sobresalen del frame principal NO se recortan. Se dibujan del
+// menos opaco (sombra, debajo) al más opaco (objeto, encima). Guarda en 'e' el desplazamiento del
+// frame principal dentro del lienzo (mergedAnchorX/Y) y su tamaño (mainW/mainH) para anclar el dibujo.
+function mdlMergedCanvas(key){
+  const e=mdlData.get(key); if(!e||!e.frames.length) return null;
+  const main=e.frames[0];
+  // bounding box relativo al frame principal en (0,0). Se calcula SIEMPRE (barato) para que
+  // mainW/anchor estén disponibles aunque el lienzo venga de caché (si no, el ciclo dejaba o.w=undefined).
+  let minX=0, minY=0, maxX=main.width, maxY=main.height;
+  for(const f of e.frames){
+    const lx=(f.posX||0)-(main.posX||0), ly=(f.posY||0)-(main.posY||0);
+    if(lx<minX) minX=lx; if(ly<minY) minY=ly;
+    if(lx+f.width>maxX) maxX=lx+f.width; if(ly+f.height>maxY) maxY=ly+f.height;
+  }
+  e.mergedAnchorX=-minX; e.mergedAnchorY=-minY; e.mainW=main.width; e.mainH=main.height;
+  const ck=key+'|merged';
+  if(mdlPix.has(ck)) return mdlPix.get(ck);
+  const W=Math.max(1,maxX-minX), H=Math.max(1,maxY-minY);
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  for(let fi=e.frames.length-1; fi>=0; fi--){
+    const f=e.frames[fi];
+    const lx=(f.posX||0)-(main.posX||0)-minX, ly=(f.posY||0)-(main.posY||0)-minY;
+    ctx.drawImage(MDL.toCanvas(f.rows,f.width,0,false), lx, ly);   // alfa source-over
+  }
   mdlPix.set(ck,cv); return cv;
 }
 // imagen lista para un objeto MDL (o null si aún decodificando)
@@ -1046,19 +1074,27 @@ function mdlObjImage(o){
   const e=mdlData.get(o.path);
   if(!e){ ensureMdl(o.path).then(()=>markDirty()); return null; }
   if(!e.frames.length) return null;
-  if(o.layer==null || o.layer>=e.frames.length) o.layer=0;
+  if(o.layer==null) return mdlMergedCanvas(o.path);   // por defecto: todos los frames unidos (como el juego)
+  if(o.layer>=e.frames.length) o.layer=0;
   if(o.shift==null) o.shift=e.frames[o.layer].shift;
-  const base=mdlPixCanvas(o.path,o.layer,o.shift);
-  if(!base) return null;
-  const c=o.crack||0;
-  if(c<=0) return base;
-  const W=e.frames[o.layer].width, sh=((o.shift%W)+W)%W;
-  const ck=o.path+'|'+o.layer+'|'+sh+'|c'+c;
-  if(mdlPix.has(ck)) return mdlPix.get(ck);
-  const cp=document.createElement('canvas'); cp.width=base.width; cp.height=base.height;
-  cp.getContext('2d').drawImage(base,0,0);
-  const out=MDL.crackFill(cp,3,c);   // c = nº de pasadas (más pasadas = más cosido)
-  mdlPix.set(ck,out); return out;
+  return mdlPixCanvas(o.path,o.layer,o.shift);
+}
+// Dibuja un objeto MDL. La caja lógica del objeto es (o.w × o.h) = frame principal.
+// En modo «Unido», el lienzo es mayor (incluye sombras): se dibuja a escala natural y desplazado
+// por el ancla, de forma que el frame principal cae EXACTAMENTE en la caja y la sombra sobresale
+// sin recortarse. 'unit' = px de pantalla por unidad lógica (cam.zoom en el lienzo; 1 en el export).
+function drawMdlObj(c,o,sx,sy,unit,img){
+  const e=mdlData.get(o.path); if(!img) img=mdlObjImage(o); if(!img) return;
+  const boxW=o.w*unit, boxH=o.h*unit;
+  if(o.layer!=null || !e || e.mergedAnchorX==null || !e.mainW){   // frame único: dibujo directo
+    drawImgFlipped(c,img,sx,sy,boxW,boxH,o.flipH,o.flipV); return;
+  }
+  const scx=boxW/e.mainW, scy=boxH/e.mainH;                       // lienzo-px → pantalla
+  const dw=img.width*scx, dh=img.height*scy;
+  const rightOver=img.width-e.mergedAnchorX-e.mainW, botOver=img.height-e.mergedAnchorY-e.mainH;
+  const dx=o.flipH ? sx-rightOver*scx : sx-e.mergedAnchorX*scx;   // con flip el sobrante cambia de lado
+  const dy=o.flipV ? sy-botOver*scy   : sy-e.mergedAnchorY*scy;
+  drawImgFlipped(c,img,dx,dy,dw,dh,o.flipH,o.flipV);
 }
 const cv=$('canvas'), ctx=cv.getContext('2d'), stage=$('stage');
 function resizeCanvas(){
@@ -1214,9 +1250,10 @@ function draw(){
   ctx.imageSmoothingEnabled=true;
   for(const o of m.objects){
     if(!effVisible(o)) continue;
-    const img = isMdlKey(o.path) ? mdlObjImage(o) : getImage(o.path);
+    const isM = isMdlKey(o.path);
+    const img = isM ? mdlObjImage(o) : getImage(o.path);
     const x=w2sX(o.x), y=w2sY(o.y), ww=o.w*cam.zoom, hh=o.h*cam.zoom;
-    if(img) drawImgFlipped(ctx,img,x,y,ww,hh,o.flipH,o.flipV);
+    if(img){ if(isM) drawMdlObj(ctx,o,x,y,cam.zoom,img); else drawImgFlipped(ctx,img,x,y,ww,hh,o.flipH,o.flipV); }
     else { ctx.fillStyle='rgba(120,140,170,.25)'; ctx.fillRect(x,y,ww,hh); ctx.strokeStyle='#46505c'; ctx.strokeRect(x,y,ww,hh); }
     if(o.id===state.selObj){
       ctx.strokeStyle = shiftAdjust ? '#5fbf6e' : '#e8b54b'; ctx.lineWidth=2; ctx.strokeRect(x-1,y-1,ww+2,hh+2);
@@ -1226,8 +1263,7 @@ function draw(){
       if(isMdlKey(o.path)){
         const e=mdlData.get(o.path);
         if(e&&e.frames.length){
-          const ck=o.crack?`  ·  🪡${o.crack}`:'';
-          const txt = (shiftAdjust ? `SHIFT ${o.shift||0}  ( , .  ajustar · S salir )` : `Capa ${(o.layer||0)+1}/${e.frames.length}  ( , .  cambiar · S shift · +/- cosido )`) + ck;
+          const txt = shiftAdjust ? `SHIFT ${o.shift||0}  ( , .  ajustar · S salir )` : (o.layer==null ? `Unido (todas las capas)  ( , .  ver capas )` : `Capa ${o.layer+1}/${e.frames.length}  ( , .  cambiar · S shift )`);
           ctx.font='12px ui-monospace,monospace'; const tw=ctx.measureText(txt).width;
           ctx.fillStyle='rgba(10,12,16,.85)'; ctx.fillRect(x-1, y-22, tw+12, 18);
           ctx.fillStyle = shiftAdjust ? '#7fe08c' : '#e8b54b'; ctx.fillText(txt, x+5, y-9);
@@ -1368,8 +1404,8 @@ function placeObject(key, wx, wy){
     ensureMdl(key).then(e=>{
       if(!e || !e.frames.length){ toast('Ese MDL16 no tiene capas de imagen',true); return; }
       const li=0; const cv=mdlPixCanvas(key,li,e.frames[li].shift);
-      const iw=cv?cv.width:e.frames[li].width, ih=cv?cv.height:e.frames[li].height;
-      const o={id:state.map.nextId++,path:key,x:Math.round(wx-iw/2),y:Math.round(wy-ih/2),w:iw,h:ih,visible:true,groupId:null,layer:li,shift:e.frames[li].shift};
+      const iw=cv?cv.width:e.frames[li].width, ih=cv?cv.height:e.frames[li].height;   // caja lógica = frame principal
+      const o={id:state.map.nextId++,path:key,x:Math.round(wx-iw/2),y:Math.round(wy-ih/2),w:iw,h:ih,visible:true,groupId:null,layer:null,shift:e.frames[li].shift};
       state.map.objects.push(o); selectObject(o.id); renderObjList(); markDirty(); renderMinimap();
     });
     return;
@@ -1792,7 +1828,7 @@ $('btnExport').onclick=async ()=>{
   await Promise.all([...new Set(m.objects.filter(o=>isMdlKey(o.path)).map(o=>o.path))].map(p=>ensureMdl(p)));
   // objects: smoothing ON
   x.imageSmoothingEnabled=true;
-  for(const o of m.objects){ if(!effVisible(o)) continue; const img=isMdlKey(o.path)?mdlObjImage(o):state.imgCache.get(o.path); if(img) drawImgFlipped(x,img,o.x,o.y,o.w,o.h,o.flipH,o.flipV); }
+  for(const o of m.objects){ if(!effVisible(o)) continue; const isM=isMdlKey(o.path); const img=isM?mdlObjImage(o):state.imgCache.get(o.path); if(img){ if(isM) drawMdlObj(x,o,o.x,o.y,1,img); else drawImgFlipped(x,img,o.x,o.y,o.w,o.h,o.flipH,o.flipV); } }
   c.toBlob(b=>{ if(!b){ toast(t('t_exportFail'), true); return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='mapa.png'; a.click(); URL.revokeObjectURL(a.href);
     toast(t('t_exported',{w:W,h:H})); }, 'image/png');
@@ -1811,7 +1847,6 @@ const KEYBINDINGS = {
       ['Ctrl + Y','Rehacer'],
       ['Ctrl + C / X / V','Copiar / Cortar / Pegar'],
       ['Ctrl + S','Guardar el mapa'],
-      ['L','Limpiar líneas de geometría de los MDL16 (on/off)'],
     ]},
     {g:'Modo Terreno (pincel)', items:[
       ['B','Pincel'],
@@ -1829,7 +1864,6 @@ const KEYBINDINGS = {
       [',&nbsp; /&nbsp; .','Capa anterior / siguiente'],
       ['S','Activar / salir del modo Shift (ajuste de desplazamiento)'],
       [',&nbsp; /&nbsp; .  (en modo Shift)','Ajustar el desplazamiento de la capa en vivo'],
-      ['+&nbsp; /&nbsp; −  (teclado numérico)','Más / menos cosido (crack-fill) en ese objeto'],
     ]},
   ]},
   en:{ title:'⌨️ Keyboard shortcuts', groups:[
@@ -1840,7 +1874,6 @@ const KEYBINDINGS = {
       ['Ctrl + Y','Redo'],
       ['Ctrl + C / X / V','Copy / Cut / Paste'],
       ['Ctrl + S','Save the map'],
-      ['L','Clean MDL16 geometry lines (on/off)'],
     ]},
     {g:'Terrain mode (brush)', items:[
       ['B','Brush'],
@@ -1858,7 +1891,6 @@ const KEYBINDINGS = {
       [',&nbsp; /&nbsp; .','Previous / next layer'],
       ['S','Toggle Shift mode (offset adjust)'],
       [',&nbsp; /&nbsp; .  (in Shift mode)','Adjust the layer offset live'],
-      ['+&nbsp; /&nbsp; −  (numpad)','More / less crack-fill on that object'],
     ]},
   ]},
 };
@@ -1940,7 +1972,7 @@ function viewerLightbox(key, name){
   const lb=$('vLightbox'), c=$('vlCanvas'); $('vlName').textContent=name;
   const draw=im=>{ if(!im)return; const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height; if(!iw||!ih)return; c.width=iw; c.height=ih; c.getContext('2d').drawImage(im,0,0); };
   c.width=1; c.height=1;
-  if(isMdlKey(key)){ const im=mdlObjImage({path:key,layer:0,shift:null}); if(im) draw(im); else ensureMdl(key).then(()=>draw(mdlObjImage({path:key,layer:0,shift:null}))); }
+  if(isMdlKey(key)){ const im=mdlObjImage({path:key,layer:null,shift:null}); if(im) draw(im); else ensureMdl(key).then(()=>draw(mdlObjImage({path:key,layer:null,shift:null}))); }
   else { const im=getImage(key); if(im) draw(im); else { const iv=setInterval(()=>{ const im2=state.imgCache.get(key); if(im2){ clearInterval(iv); draw(im2); } },120); setTimeout(()=>clearInterval(iv),5000); } }
   lb.classList.add('show');
 }
@@ -1971,7 +2003,6 @@ window.addEventListener('keydown', e=>{
   if(ctrl&&e.key.toLowerCase()==='x'){ e.preventDefault(); $('btnCut').click(); return; }
   if(ctrl&&e.key.toLowerCase()==='v'){ e.preventDefault(); $('btnPaste').click(); return; }
   if(ctrl&&e.key.toLowerCase()==='s'){ e.preventDefault(); $('btnSave').click(); return; }
-  if((e.key==='l'||e.key==='L') && !ctrl){ mdlClean=!mdlClean; mdlPix.clear(); state.imgCache.clear(); markDirty(); renderObjList(); toast(mdlClean?'Limpieza de líneas MDL16: ON':'Limpieza de líneas MDL16: OFF'); e.preventDefault(); return; }
   if(state.mode==='paint'){
     if(e.key==='['||e.key===']'){ const f=e.key===']'?1.15:1/1.15; brush.size=Math.max(8,Math.min(420,Math.round(brush.size*f))); $('bbSize').value=brush.size; $('bbSizeV').textContent=brush.size; markDirty(); e.preventDefault(); return; }
     if(e.key==='b'||e.key==='B'){ $('bbBrush').onclick(); e.preventDefault(); return; }
@@ -1984,11 +2015,9 @@ window.addEventListener('keydown', e=>{
       const md=mdlData.get(o.path);
       if(!md){ ensureMdl(o.path).then(()=>markDirty()); }
       else if(md.frames.length){
-        if(o.layer==null || o.layer>=md.frames.length) o.layer=0;
-        // cosido (crack-fill) por objeto: + y - del teclado numérico
-        if(e.code==='NumpadAdd' || (e.key==='+' && !ctrl)){ o.crack=Math.min(8,(o.crack||0)+1); toast(`🪡 Cosido nivel ${o.crack}`); markDirty(); e.preventDefault(); return; }
-        if(e.code==='NumpadSubtract' || (e.key==='-' && !ctrl)){ o.crack=Math.max(0,(o.crack||0)-1); toast(o.crack?`🪡 Cosido nivel ${o.crack}`:'Sin cosido'); markDirty(); e.preventDefault(); return; }
+        if(o.layer!=null && o.layer>=md.frames.length) o.layer=0;
         if(e.key==='s'||e.key==='S'){
+          if(o.layer==null) o.layer=0;   // el ajuste de shift necesita un frame concreto
           shiftAdjust=!shiftAdjust;
           toast(shiftAdjust?'🎯 Modo SHIFT — «,» y «.» ajustan el desplazamiento · «S» para salir':'🧩 Modo capas — «,» y «.» cambian de capa · «S» para ajustar shift');
           markDirty(); e.preventDefault(); return;
@@ -1997,16 +2026,21 @@ window.addEventListener('keydown', e=>{
           const dir=(e.key==='.')?1:-1;
           if(!e.repeat) pushUndo();   // undo una sola vez aunque se mantenga pulsado
           if(shiftAdjust){
+            if(o.layer==null) o.layer=0;
             const W=md.frames[o.layer].width;
             const cur=(o.shift==null?md.frames[o.layer].shift:o.shift);
             o.shift=((cur+dir)%W+W)%W;
             toast(`Shift ${o.shift}/${W}`);
           } else {
-            o.layer=((o.layer+dir)%md.frames.length+md.frames.length)%md.frames.length;
-            o.shift=md.frames[o.layer].shift;
-            const cv=mdlPixCanvas(o.path,o.layer,o.shift);
-            if(cv){ const cx=o.x+o.w/2, cy=o.y+o.h/2; o.w=cv.width; o.h=cv.height; o.x=Math.round(cx-o.w/2); o.y=Math.round(cy-o.h/2); }
-            toast(`Capa ${o.layer+1}/${md.frames.length} · ${md.frames[o.layer].width}×${md.frames[o.layer].rows.length}`);
+            // ciclo: Unido (todas las capas) → capa 1 → … → capa N → Unido
+            const N=md.frames.length;
+            const idx=(o.layer==null)?(dir>0?0:N-1):o.layer+dir;
+            o.layer=(idx<0||idx>=N)?null:idx;
+            let nw,nh;
+            if(o.layer==null){ mdlMergedCanvas(o.path); const me=mdlData.get(o.path); nw=me.mainW||md.frames[0].width; nh=me.mainH||md.frames[0].rows.length; }  // caja = frame principal
+            else { o.shift=md.frames[o.layer].shift; nw=md.frames[o.layer].width; nh=md.frames[o.layer].rows.length; }
+            { const cx=o.x+o.w/2, cy=o.y+o.h/2; o.w=nw; o.h=nh; o.x=Math.round(cx-o.w/2); o.y=Math.round(cy-o.h/2); }
+            toast(o.layer==null?`Unido (todas las capas como el juego)`:`Capa ${o.layer+1}/${N} · ${md.frames[o.layer].width}×${md.frames[o.layer].rows.length}`);
           }
           markDirty(); renderMinimap(); updateStatus(); e.preventDefault(); return;
         }
@@ -2086,15 +2120,122 @@ const MDL = {
     while(rows.length<nrows) rows.push(new Array(width).fill(null));
     return rows;
   },
-  // Devuelve {frames:[{width,height,rows,opaque}]} — decodifica cada frame por su ALTURA del header
+  // === FORMATO REAL FRM16 (derivado del loader del juego, FUN_0055bcd0) ===
+  // Cabecera 36 bytes desde 0x32: pos X/Y (negada) en 2-5, ancho/alto en 6-9,
+  // flags en 12-15, y CINCO tamaños de capa en 16-35. Cada capa = [datos RLE][tabla de filas: alto*4].
+  // La tabla da el offset de cada fila → se decodifica fila a fila, SIN shift ni wrap.
+  decodeRowRLE(d,start,end,width){
+    const row=new Array(width).fill(null); let x=0,pos=start;
+    if(end>d.length) end=d.length;
+    while(pos<end && x<width){
+      const ctrl=d[pos++];
+      if(ctrl&0x80){ x+=ctrl&0x7F; }
+      else if(ctrl&0x40){ const c=ctrl&0x3F; for(let i=0;i<c;i++){ if(pos+1<d.length && x<width) row[x]=d[pos]|(d[pos+1]<<8); pos+=2; x++; } }
+      else{ const c=ctrl&0x3F; if(pos+1<d.length){ const v=d[pos]|(d[pos+1]<<8); pos+=2; for(let i=0;i<c;i++){ if(x<width) row[x]=v; x++; } } }
+    }
+    return row;
+  },
+  decodeLayerTable(d,dataStart,size,tableStart,width,height){
+    const rows=[]; const t=r=>(d[tableStart+r*4]|(d[tableStart+r*4+1]<<8)|(d[tableStart+r*4+2]<<16)|(d[tableStart+r*4+3]<<24))>>>0;
+    for(let r=0;r<height;r++){
+      const s=dataStart+t(r), e=dataStart+(r+1<height? t(r+1) : size);
+      rows.push(this.decodeRowRLE(d,s,Math.min(e,dataStart+size),width));
+    }
+    return rows;
+  },
+  // Decodifica la SILUETA: color del slot 4 (RLE 16-bit) + su ALFA del slot 3.
+  // Hallazgo validado contra el sampler real (FUN_0055d8b0) y los binarios: el slot 3 es
+  // 1 byte de alfa por cada píxel de silueta (no transparente), en el MISMO orden de recorrido
+  // del slot 4. Los tramos SKIP no consumen alfa; FILL y LITERAL consumen 1 byte por píxel.
+  // Comprobado: slot3_size == nº de píxeles de silueta (±4) y el consumo por fila cuadra con su tabla.
+  // Devuelve filas empaquetadas: null = transparente · color(≤0xFFFF) = opaco · (alfa<<16|color) = alfa parcial.
+  decodeSilhouette(d, s4d,s4s,s4t, s3d,s3s,s3t, W,H){
+    const out=[];
+    const t4=r=>(d[s4t+r*4]|(d[s4t+r*4+1]<<8)|(d[s4t+r*4+2]<<16)|(d[s4t+r*4+3]<<24))>>>0;
+    const t3=r=>(d[s3t+r*4]|(d[s3t+r*4+1]<<8)|(d[s3t+r*4+2]<<16)|(d[s3t+r*4+3]<<24))>>>0;
+    for(let y=0;y<H;y++){
+      const row=new Array(W).fill(null);
+      let p=s4d+t4(y); const pend=Math.min(s4d+(y+1<H? t4(y+1):s4s), s4d+s4s);
+      let a=s3d+t3(y); let col=0;
+      while(p<pend && col<W){
+        const ctrl=d[p++];
+        if(ctrl&0x80){ col+=ctrl&0x7F; }                       // SKIP: transparente, no consume alfa
+        else if(ctrl&0x40){ const L=ctrl&0x3F;                 // LITERAL: L colores, L alfas
+          for(let k=0;k<L;k++){
+            if(col<W && p+1<d.length){ const c=d[p]|(d[p+1]<<8); const al=a<d.length?d[a]:255;
+              if(al>0) row[col]= al>=255? c : (((al&0xff)<<16)|c); }
+            p+=2; a++; col++;
+          }
+        } else { const L=ctrl&0x3F; const c=(p+1<d.length)?(d[p]|(d[p+1]<<8)):0; p+=2;  // FILL: 1 color, L alfas
+          for(let k=0;k<L;k++){
+            if(col<W){ const al=a<d.length?d[a]:255; if(al>0) row[col]= al>=255? c : (((al&0xff)<<16)|c); }
+            a++; col++;
+          }
+        }
+      }
+      out.push(row);
+    }
+    return out;
+  },
+  // Decodifica UN frame FRM16 (hs = posición del 0x32) y lo compone COMO EL JUEGO.
+  // Roles de slot derivados del sampler real del juego (FUN_0055d8b0, rama modo 4, flags&6==4):
+  //   · SLOT 0 = OBJETO (color RGB565). Si tiene color en (x,y) → píxel opaco del objeto.
+  //   · SLOT 4 = SILUETA/SOMBRA/ILUMINACIÓN (color RGB565). Solo donde el slot 0 es transparente.
+  //   · SLOT 3 = ALFA de la silueta (1 byte/píxel, lockstep con el slot 4 — ver decodeSilhouette).
+  // Así los bordes anti-alias (alfa ~10) se desvanecen y sombras/iluminaciones llevan su alfa real.
+  // Sin colorkey: 0x0000/0xFFFF son colores válidos.
+  // Codificación en 'rows': null = transparente · color(≤0xFFFF) = opaco · (alfa<<16|color) = alfa parcial.
+  decodeFrameComposite(d,hs){
+    if(hs<0 || hs+36>d.length || d[hs]!==0x32) return null;
+    const W=d[hs+6]|(d[hs+7]<<8), H=d[hs+8]|(d[hs+9]<<8);
+    if(W<1||W>4096||H<1||H>4096) return null;
+    const s16=o=>{ const v=d[hs+o]|(d[hs+o+1]<<8); return v>=0x8000? v-0x10000 : v; };
+    const posX=-s16(2), posY=-s16(4);
+    const u32=o=>(d[o]|(d[o+1]<<8)|(d[o+2]<<16)|(d[o+3]<<24))>>>0;
+    const flags=u32(hs+12);
+    const sizes=[0,1,2,3,4].map(k=>u32(hs+16+4*k));
+    // Localizar los 5 slots: cada uno = [datos: sizes[slot]][tabla de filas: H*4]
+    let pos=hs+36; const slots=[];
+    for(let slot=0;slot<5;slot++){
+      const sz=sizes[slot]; if(sz===0){ slots.push(null); continue; }
+      if(sz>0x400000) return null;                       // tamaño imposible → no es frame válido
+      const dataStart=pos; pos+=sz;
+      const tableStart=pos; pos+=H*4;
+      if(pos>d.length) return null;                       // se sale del fichero → falso positivo
+      slots.push({slot,dataStart,size:sz,tableStart});
+    }
+    const empty=()=>{ const g=[]; for(let y=0;y<H;y++) g.push(null); return g; };
+    const obj = slots[0] ? this.decodeLayerTable(d,slots[0].dataStart,slots[0].size,slots[0].tableStart,W,H) : empty();
+    // Silueta con alfa real si están slot4 Y slot3; si solo está el slot4, opaca como respaldo.
+    const sil = (slots[4] && slots[3])
+      ? this.decodeSilhouette(d, slots[4].dataStart,slots[4].size,slots[4].tableStart, slots[3].dataStart,slots[3].size,slots[3].tableStart, W,H)
+      : (slots[4] ? this.decodeLayerTable(d,slots[4].dataStart,slots[4].size,slots[4].tableStart,W,H) : null);
+    // Componer: objeto (slot 0) opaco encima; donde es transparente, silueta/sombra con su alfa.
+    const rows=[]; let opaque=0;
+    for(let y=0;y<H;y++){
+      const orow=obj[y]||null, srow=sil?sil[y]:null;
+      const out=new Array(W).fill(null);
+      for(let x=0;x<W;x++){
+        const o = orow?orow[x]:null;
+        if(o!==null){ out[x]=o; opaque++; continue; }     // OBJETO opaco
+        if(srow){ const s=srow[x]; if(s!==null){ out[x]=s; opaque++; } }   // SILUETA con su alfa (ya empaquetada)
+      }
+      rows.push(out);
+    }
+    return {width:W,height:H,rows,opaque,posX,posY,endOffset:pos,flags,sizes};
+  },
+  // Un composite por cada frame FRM16 del MDL16 (01 32 10) o del .frm16 suelto (32 10).
   decodeAll(d){
-    const frames=this.findFrames(d);
-    return frames.map(f=>{
-      const rows=this.decodeByHeight(d,f.dataStart,f.width,f.height);
-      let opaque=0;
-      for(const r of rows) for(const p of r) if(p!==null&&p!==0xFFFF) opaque++;
-      return {width:f.width,height:f.height,rows,opaque};
-    });
+    const out=[];
+    for(let i=0;i+37<=d.length;i++){
+      if(d[i]===0x01 && d[i+1]===0x32 && d[i+2]===0x10){
+        const fr=this.decodeFrameComposite(d,i+1);
+        if(fr){ out.push(fr); i=fr.endOffset-1; }         // saltar al final del frame
+      }
+    }
+    if(out.length) return out;
+    if(d[0]===0x32 && d[1]===0x10){ const fr=this.decodeFrameComposite(d,0); if(fr) out.push(fr); }
+    return out;
   },
   // Elige el frame con MÁS contenido opaco (la imagen principal; en muchos modelos
   // el frame 0 es una máscara casi vacía y la imagen real está más adelante)
@@ -2104,17 +2245,21 @@ const MDL = {
     frames.forEach((f,i)=>{ if(f.opaque>best.opaque){best=f;bi=i;} });
     return {frame:best,index:bi};
   },
-  // Renderiza filas a canvas con shift opcional y autocrop
+  // Renderiza filas a canvas con shift opcional y autocrop.
+  // null = transparente · color(≤0xFFFF) = opaco · (alfa<<16|color) = silueta con alfa parcial.
+  // SIN colorkey (0x0000/0xFFFF son colores válidos). El alfa parcial deja que bordes/sombras/
+  // iluminaciones se mezclen con el terreno, como en el juego.
   toCanvas(rows,width,shift=0,autocrop=false){
     const height=rows.length;
     const cv=document.createElement('canvas'); cv.width=width; cv.height=height;
     const ctx=cv.getContext('2d'); const img=ctx.createImageData(width,height); const data=img.data;
     for(let y=0;y<height;y++){ const row=rows[y];
       for(let x=0;x<width;x++){ const v=row[x];
-        if(v!==null&&v!==0xFFFF){
-          const nx=(x+shift)%width; const idx=(y*width+nx)*4;
-          data[idx]=((v>>11)&31)*255/31|0; data[idx+1]=((v>>5)&63)*255/63|0; data[idx+2]=(v&31)*255/31|0; data[idx+3]=255;
-        }
+        if(v===null) continue;
+        let cc,al;
+        if(v<=0xFFFF){ cc=v; al=255; } else { cc=v&0xFFFF; al=(v>>16)&0xFF; }
+        const nx=(x+shift)%width; const idx=(y*width+nx)*4;
+        data[idx]=((cc>>11)&31)*255/31|0; data[idx+1]=((cc>>5)&63)*255/63|0; data[idx+2]=(cc&31)*255/31|0; data[idx+3]=al;
       }
     }
     ctx.putImageData(img,0,0);
@@ -2553,7 +2698,7 @@ function shiftLoad(file){
     const d=new Uint8Array(e.target.result);
     const frames=MDL.decodeAll(d);
     if(!frames.length){ toast('No se encontraron capas',true); return; }
-    _shiftState={frames,active:0,shifts:frames.map(f=>MDL.bestShift(f.rows,f.width)),fileName:file.webkitRelativePath||file.name};
+    _shiftState={frames,active:0,shifts:frames.map(()=>0),fileName:file.webkitRelativePath||file.name};
     $('shiftDrop').style.display='none';
     $('shiftWork').style.display='block';
     // Tabs de capas
@@ -2661,10 +2806,7 @@ $('btnExtractTool').onclick=()=>{
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;margin-top:14px">
       <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extCrop" checked> Recortar al contenido</label>
       <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extSkipMask" checked> Saltar máscaras / capas vacías</label>
-      <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extCrack"> Cerrar costuras (crack-fill)</label>
-      <label style="display:flex;align-items:center;gap:8px;color:#c8cfd8;font-size:13px"><input type="checkbox" id="extCompose"> Componer imagen completa <span style="color:#e3a14b">(experimental)</span></label>
     </div>
-    <p style="color:var(--muted);font-size:11px;margin:10px 0 0;line-height:1.5">Por defecto se extrae cada capa por separado (fiable). «Crack-fill» y «Componer» son para casos concretos: pueden alterar algunas imágenes, déjalos apagados para conversión en masa.</p>
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="dlbtn" id="extDisk" disabled style="flex:1;opacity:.5">💾 Guardar a disco (carpeta)</button>
       <button class="dlbtn" id="extZip" disabled style="flex:1;opacity:.5;background:#3a4252;color:#fff">📦 Descargar ZIP</button>
@@ -2686,7 +2828,7 @@ $('btnExtractTool').onclick=()=>{
 
   async function process(toDisk){
     const log=$('extLog'); log.style.display='block'; log.innerHTML='';
-    const crop=$('extCrop').checked, skipMask=$('extSkipMask').checked, crack=$('extCrack').checked, compose=$('extCompose').checked;
+    const crop=$('extCrop').checked, skipMask=$('extSkipMask').checked;
     const logln=(t,c)=>{ const l=document.createElement('div'); if(c)l.style.color=c; l.textContent=t; log.appendChild(l); log.scrollTop=log.scrollHeight; };
 
     let dirOk=false;
@@ -2704,33 +2846,20 @@ $('btnExtractTool').onclick=()=>{
         const d=new Uint8Array(await file.arrayBuffer());
         const relBase=(file.webkitRelativePath||file.name).replace(/\.mdl16$/i,'');
 
-        if(compose){
-          // Modo experimental: una imagen compuesta por archivo
-          let cv=MDL.composeComplete(d,{multilayer:true});
-          if(!cv){ fail++; logln(`✗ ${file.name}: sin imagen`, '#d65a5a'); continue; }
-          if(crack) cv=MDL.crackFill(cv,3,2);
-          if(crop) cv=cropCanvas(cv);
-          await saveCv(cv, relBase+'.png'); pngs++; files++;
-        } else {
-          // Modo fiable: TODAS las capas limpias por separado
-          const frames=MDL.decodeAll(d);
-          // ordenar por densidad: la más densa es la principal (sin sufijo)
-          const idx=frames.map((f,i)=>i).filter(i=>frames[i].opaque>0);
-          idx.sort((a,b)=>frames[b].opaque-frames[a].opaque);
-          let exported=0;
-          for(const i of idx){
-            let rows=MDL.trimEdgeRows(frames[i].rows);
-            if(skipMask && !MDL.looksLikeImage(rows,frames[i].width)) continue;
-            const sh=MDL.bestShift(rows,frames[i].width);
-            let cv=MDL.toCanvas(rows,frames[i].width,sh,crop);
-            if(mdlClean) MDL.cleanLines(cv);
-            if(crack) cv=MDL.crackFill(cv,3,2);
-            const rel = exported===0 ? relBase+'.png' : `${relBase}_L${i}.png`;
-            await saveCv(cv, rel); exported++; pngs++;
-          }
-          if(exported===0){ fail++; logln(`✗ ${file.name}: sin capas válidas`, '#d65a5a'); }
-          else files++;
+        // TODAS las capas limpias por separado (idéntico al render del editor)
+        const frames=MDL.decodeAll(d);
+        const idx=frames.map((f,i)=>i).filter(i=>frames[i].opaque>0);
+        idx.sort((a,b)=>frames[b].opaque-frames[a].opaque);
+        let exported=0;
+        for(const i of idx){
+          const rows=frames[i].rows;
+          if(skipMask && !MDL.looksLikeImage(rows,frames[i].width)) continue;
+          const cv=MDL.toCanvas(rows,frames[i].width,0,crop);   // sin shift: ya está colocado
+          const rel = exported===0 ? relBase+'.png' : `${relBase}_L${i}.png`;
+          await saveCv(cv, rel); exported++; pngs++;
         }
+        if(exported===0){ fail++; logln(`✗ ${file.name}: sin capas válidas`, '#d65a5a'); }
+        else files++;
         if(files%25===0) logln(`… ${files} archivos`, '#8b95a3');
       }catch(err){ fail++; logln(`✗ ${file.name}: ${err.message}`, '#d65a5a'); }
     }
@@ -2793,7 +2922,7 @@ function rcLoad(file){
   _recolor.name=file.name.replace(/\.(mdl16|jpg|jpeg|webp)$/i,'.png');
   if(/\.mdl16$/i.test(file.name)){
     const rd=new FileReader();
-    rd.onload=e=>{ const d=new Uint8Array(e.target.result); let cv=MDL.composeComplete(d,{multilayer:true}); if(cv){cv=MDL.crackFill(cv,3,2);cv=cropCanvas(cv);} const im=new Image(); im.onload=()=>rcReady(im); im.src=cv?cv.toDataURL():''; };
+    rd.onload=e=>{ const d=new Uint8Array(e.target.result); const frames=MDL.decodeAll(d).filter(f=>f.opaque>0); let cv=null; if(frames.length){ frames.sort((a,b)=>b.opaque-a.opaque); cv=cropCanvas(MDL.toCanvas(frames[0].rows,frames[0].width,0,false)); } const im=new Image(); im.onload=()=>rcReady(im); im.src=cv?cv.toDataURL():''; };
     rd.readAsArrayBuffer(file);
   } else {
     const rd=new FileReader();
