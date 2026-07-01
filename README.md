@@ -16,3 +16,6 @@ Follow these steps to load the game content:
 
 4-Opcional download the cache folder from my Google Drive (all PNG contents) [Cache](https://drive.google.com/file/d/1UzN_TL-HNgncYZ7H7IWiDISJIhE-dDFn/view?usp=sharing)
 
+UPDATE :
+
+Major improvements in file playback 1/7/26
